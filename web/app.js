@@ -6,16 +6,42 @@ const fa = value => new Intl.NumberFormat('fa-IR').format(value);
 const money = value => value === null || value === undefined ? '—' : `${value < 0 ? '−' : ''}$${num(Math.abs(value))}`;
 const date = ts => ts ? new Date(ts*1000).toLocaleString('fa-IR',{timeZone:'Asia/Tehran',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '—';
 const time = ts => ts ? new Date(ts*1000).toLocaleTimeString('en-GB',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
-const titles = {overview:['دید کلی','هر معامله، با یک دلیل.','بازار را ببین. ریسک را محدود کن. از نتیجه یاد بگیر.'],agent:['ایجنت و یادگیری','از نتیجه یاد بگیر؛ با شواهد تغییر کن.','قانون تازه باید از آزمون داده‌های دیده‌نشده عبور کند.'],journal:['ژورنال معاملات','هیچ تصمیمی، بدون سابقه.','ورود، خروج، هزینه و دلیل هر تصمیم، در یک دفتر ماندگار.'],settings:['اتصال و تنظیمات','کنترل در دست توست.','اتصال محلی، اجرای دمو و محدودیت‌های روشن.']};
+const titles = {overview:['دید کلی','هر معامله، با یک دلیل.','بازار را ببین. ریسک را محدود کن. از نتیجه یاد بگیر.'],agent:['ایجنت و یادگیری','از نتیجه یاد بگیر؛ با شواهد تغییر کن.','قانون تازه باید از آزمون داده‌های دیده‌نشده عبور کند.'],journal:['ژورنال معاملات','هیچ تصمیمی، بدون سابقه.','ورود، خروج، هزینه و دلیل هر تصمیم، در یک دفتر ماندگار.'],tools:['سشن و اخبار','زمان درست را هم ببین.','سشن‌های جهانی و تقویم اقتصادی، در کنار تصمیم‌های ربات.'],settings:['اتصال و تنظیمات','کنترل در دست توست.','اتصال محلی، اجرای دمو و محدودیت‌های روشن.']};
 let state, token, selectedSymbol='EURUSD', selectedTimeframe='M1', fetching=false, toastTimer;
 const priceDigits=()=>state?.markets[selectedSymbol]?.spec?.digits ?? (selectedSymbol==='EURUSD'?5:2);
 
 function setText(id,value){ $(id).textContent=value; }
 function signed(id,value,format=money){const el=$(id);el.textContent=format(value);el.classList.toggle('positive',value>0);el.classList.toggle('negative',value<0);}
 function notify(text,error=false){$('toast').textContent=text;$('toast').className=error?'error':'';$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,6500);}
-function show(view){document.querySelectorAll('.view').forEach(el=>el.hidden=el.id!==view);document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===view));setText('view-name',titles[view][0]);setText('page-title',titles[view][1]);setText('page-subtitle',titles[view][2]);}
+function show(view){document.querySelectorAll('.view').forEach(el=>el.hidden=el.id!==view);document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===view));setText('view-name',titles[view][0]);setText('page-title',titles[view][1]);setText('page-subtitle',titles[view][2]);if(view==='tools')loadMarketTools();}
+
+let toolsLoaded=false,toolsLoading=false;
+async function loadMarketTools(force=false){
+  if(toolsLoading||toolsLoaded&&!force)return;
+  toolsLoading=true;
+  try{
+    const response=await fetch('/api/market-tools',{cache:'no-store'});
+    if(!response.ok)throw new Error('ابزارهای بازار دریافت نشد؛ صفحه را تازه کن.');
+    const config=await response.json();
+    for(const widget of config.widgets){
+      const url=new URL(widget.embed_url);
+      if(url.origin!=='https://widget.financekit.org'||!['/embed/forex-sessions','/embed/economic-calendar'].includes(url.pathname))throw new Error('آدرس ابزار معتبر نیست.');
+      const target=widget.key==='forex-sessions'?$('sessions-widget'):$('calendar-widget');
+      const iframe=document.createElement('iframe');
+      iframe.title=widget.title+' · به وقت تهران';iframe.src=url.href;
+      iframe.loading='lazy';iframe.referrerPolicy='no-referrer';
+      iframe.setAttribute('sandbox','allow-scripts allow-same-origin');
+      iframe.setAttribute('allow','camera \'none\'; microphone \'none\'; geolocation \'none\'');
+      target.replaceChildren(iframe);
+    }
+    toolsLoaded=true;
+  }catch(error){notify(error.message,true);}
+  finally{toolsLoading=false;}
+}
 document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.view)));
 document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));
+document.querySelectorAll('[data-tool]').forEach(el=>el.addEventListener('click',()=>{show('tools');$('tool-'+el.dataset.tool).scrollIntoView({behavior:'smooth',block:'start'});}));
+$('reload-market-tools').addEventListener('click',()=>loadMarketTools(true));
 document.querySelectorAll('[data-symbol]').forEach(el=>el.addEventListener('click',()=>{selectedSymbol=el.dataset.symbol;document.querySelectorAll('[data-symbol]').forEach(x=>x.classList.toggle('selected',x===el));if(state) renderMarket();}));
 $('chart-timeframe').addEventListener('change',()=>{selectedTimeframe=$('chart-timeframe').value;if(state)renderMarket();});
 $('timeframe-summary').addEventListener('click',event=>{const button=event.target.closest('[data-timeframe]');if(!button)return;selectedTimeframe=button.dataset.timeframe;$('chart-timeframe').value=selectedTimeframe;if(state)renderMarket();});
@@ -35,12 +61,14 @@ $('flatten-button').addEventListener('click',()=>control('flatten'));
 $('rollback-button').addEventListener('click',()=>control('rollback'));
 $('demo-arm').addEventListener('click',async()=>{if(await control('demo_arm',{confirmation:$('demo-confirm').value.trim()})) $('demo-confirm').value='';});
 $('demo-disarm').addEventListener('click',()=>control('demo_disarm'));
-$('open-calendar').addEventListener('click',()=>{
+function openCalendar(){
   const until=state?.news.valid_until || (Date.now()/1000+8*3600);
   $('news-until').value=new Date(until*1000).toISOString().slice(0,16);
   $('news-events').value=(state?.news.events||[]).map(e=>`${new Date(e.time*1000).toISOString().slice(0,16)} | ${e.currency} | ${e.title}`).join('\n');
   $('news-reviewed').checked=false;$('calendar-dialog').showModal();
-});
+}
+$('open-calendar').addEventListener('click',openCalendar);
+document.querySelectorAll('[data-open-calendar]').forEach(el=>el.addEventListener('click',openCalendar));
 $('close-calendar').addEventListener('click',()=>$('calendar-dialog').close());
 $('calendar-form').addEventListener('submit',async event=>{
   event.preventDefault();

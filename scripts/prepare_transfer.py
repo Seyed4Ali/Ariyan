@@ -24,7 +24,7 @@ def prepare(target):
         for path in (ROOT/folder).rglob('*'):
             if path.is_file() and not path.is_symlink() and '__pycache__' not in path.parts and path.suffix in extensions:
                 files[path.relative_to(ROOT).as_posix()]=path.read_bytes()
-    for name in ('docs/transfer-fa.md','docs/checklist-fa.md','docs/AGENT-HANDOFF.md'):
+    for name in ('docs/transfer-fa.md','docs/checklist-fa.md','docs/AGENT-HANDOFF.md','docs/market-tools-fa.md'):
         files[name]=(ROOT/name).read_bytes()
     # Machine-specific paths and any unknown runtime fields are not shipped.
     config=json.loads(files['config.json'])

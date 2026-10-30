@@ -10,6 +10,7 @@
     <button data-view="overview" class="nav active"><span>◫</span>دید کلی<span class="nav-dot"></span></button>
     <button data-view="agent" class="nav"><span>✧</span>ایجنت و یادگیری<span class="nav-tag">LAB</span></button>
     <button data-view="journal" class="nav"><span>▤</span>ژورنال معاملات</button>
+    <button data-view="tools" class="nav"><span>◷</span>سشن و اخبار</button>
     <button data-view="settings" class="nav"><span>⚙</span>اتصال و تنظیمات</button>
   </nav>
   <div class="sidebar-bottom"><div class="local-label"><span class="tiny-dot"></span>روی کامپیوتر شما</div><p>داده‌ها و آموخته‌ها در پایگاه‌دادهٔ محلی ذخیره می‌شوند.</p><div class="sidebar-line"></div><div class="profile"><span>ع</span><div>میز شخصی<small>EURUSD · XAUUSD · BTCUSD</small></div><b>↗</b></div></div>
@@ -29,6 +30,7 @@
         <article class="metric"><div>افت از اوج سرمایه <span>↘</span></div><strong id="drawdown">—</strong><small>سقف توقف کل: ۵٪</small></article>
         <article class="metric"><div>معاملات بسته‌شده <span>≋</span></div><strong id="trade-count">—</strong><small id="win-rate">نرخ برد پس از اولین خروج</small></article>
       </div>
+      <div class="market-tools-shortcuts"><button data-tool="forex-sessions"><span>◷</span><div><strong>سشن‌های فارکس</strong><small>ساعت بازارها و هم‌پوشانی‌ها به وقت تهران</small></div><b>←</b></button><button data-tool="economic-calendar"><span>▦</span><div><strong>تقویم اقتصادی فارسی</strong><small>رویدادها، اهمیت خبر و ارز مرتبط</small></div><b>←</b></button></div>
       <div class="overview-grid">
         <article class="panel market-panel"><div class="panel-head"><div><span class="eyebrow">MARKET WATCH</span><h2>نبض بازار</h2></div><div class="timeframes"><label for="chart-timeframe">تایم‌فریم نمودار</label><select id="chart-timeframe" aria-label="تایم‌فریم نمودار" dir="ltr"><option>M1</option><option>M2</option><option>M3</option><option>M4</option><option>M5</option><option>M6</option><option>M10</option><option>M12</option><option>M15</option><option>M20</option><option>M30</option><option>H1</option></select></div></div>
           <div class="market-tabs"><button class="market-tab selected" data-symbol="EURUSD"><span class="asset-icon euro">€</span><span>EUR / USD<small>یورو · دلار آمریکا</small></span><strong id="quote-EURUSD">—</strong></button><button class="market-tab" data-symbol="XAUUSD"><span class="asset-icon gold">Au</span><span>XAU / USD<small>طلا · دلار آمریکا</small></span><strong id="quote-XAUUSD">—</strong></button><button class="market-tab" data-symbol="BTCUSD"><span class="asset-icon bitcoin">₿</span><span>BTC / USD<small>بیت‌کوین · دلار آمریکا</small></span><strong id="quote-BTCUSD">—</strong></button></div>
@@ -57,6 +59,14 @@
     <section id="journal" class="view" hidden>
       <article class="panel"><div class="panel-head"><div><span class="eyebrow">EVERY TRADE HAS A RECORD</span><h2>ژورنال معاملات</h2></div><a class="button ghost" href="/api/export" download>دریافت CSV ↓</a></div><div class="table-wrap" id="trade-history"></div></article>
       <article class="panel activity-panel"><div class="panel-head"><h2>رویدادها و دلیل تصمیم‌ها</h2><span class="muted">۴۰ رویداد آخر</span></div><div id="events"></div></article>
+    </section>
+
+    <section id="tools" class="view" hidden>
+      <div class="tools-intro panel"><div><span class="eyebrow">SESSIONS & ECONOMIC CALENDAR</span><h2>زمان بازار و خبر، کنار نمودار.</h2><p>ابزارهای استفاده‌شده در صفحات ایران‌ریبیت، با زبان فارسی و منطقهٔ زمانی تهران. محتوای ابزارها از FinanceKit بارگذاری می‌شود.</p></div><span class="subtle-tag">Asia / Tehran</span></div>
+      <div class="tools-notice"><span>◈</span><p>تقویم برای مشاهده و بررسی است. ورود ربات همچنان به ثبت بررسی اخبار نیاز دارد؛ نمایش ویجت به‌تنهایی اخبار را تأیید نمی‌کند. ساعت‌های سشن هم وضعیت بازبودن نماد نزد بروکر را تضمین نمی‌کنند.</p><button class="button ghost" data-open-calendar>ثبت بررسی اخبار</button></div>
+      <article class="panel widget-panel" id="tool-forex-sessions"><div class="panel-head"><div><span class="eyebrow">FOREX SESSIONS</span><h2>سشن‌های فارکس به وقت ایران</h2></div><a class="button ghost" href="https://iranrebate.com/trading-tools/forex-sessions/" target="_blank" rel="noopener noreferrer">صفحهٔ ایران‌ریبیت ↗</a></div><div class="widget-shell sessions-widget" id="sessions-widget"><p class="empty">در حال آماده‌سازی ابزار سشن‌ها…</p></div><p class="footnote">ابزار بیرونی به اینترنت نیاز دارد. اگر نمایش داده نشد، از لینک صفحهٔ اصلی استفاده کن.</p></article>
+      <article class="panel widget-panel" id="tool-economic-calendar"><div class="panel-head"><div><span class="eyebrow">ECONOMIC CALENDAR</span><h2>تقویم اقتصادی فارسی</h2></div><a class="button ghost" href="https://iranrebate.com/trading-tools/forex-factory/" target="_blank" rel="noopener noreferrer">صفحهٔ ایران‌ریبیت ↗</a></div><div class="widget-shell calendar-widget" id="calendar-widget"><p class="empty">در حال آماده‌سازی تقویم اقتصادی…</p></div><div class="widget-actions"><p class="footnote">زمان‌های ویجت به وقت تهران تنظیم شده‌اند. هنگام ثبت خبر در فرم ربات، زمان را به UTC وارد کن؛ فرم فعلی ±۲۰ دقیقه از خبر ورود را مسدود می‌کند.</p><button class="text-button" data-open-calendar>ثبت رویدادها در چک‌لیست ربات ←</button></div></article>
+      <div class="tools-footer"><span>منابع: ایران‌ریبیت · ویجت‌های FinanceKit</span><button class="text-button" id="reload-market-tools">بارگذاری دوبارهٔ ابزارها ↻</button></div>
     </section>
 
     <section id="settings" class="view" hidden>

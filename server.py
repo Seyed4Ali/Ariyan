@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 from arian.engine import Engine
+from arian.market_tools import market_tools, WIDGET_ORIGIN
 
 ROOT = Path(__file__).resolve().parent
 
@@ -36,7 +37,7 @@ def make_handler(engine, token, port):
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('Referrer-Policy', 'no-referrer')
-            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
+            self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-src " + WIDGET_ORIGIN + "; frame-ancestors 'none'")
             if download:
                 self.send_header('Content-Disposition', f'attachment; filename="{download}"')
             self.end_headers()
@@ -56,6 +57,8 @@ def make_handler(engine, token, port):
                 self.reply(200, dict(token=token))
             elif path == '/api/state':
                 self.reply(200, engine.snapshot())
+            elif path == '/api/market-tools':
+                self.reply(200, market_tools())
             elif path == '/api/export':
                 columns = ['id', 'stream', 'symbol', 'direction', 'status', 'opened', 'closed', 'entry', 'sl', 'tp', 'exit', 'volume', 'risk_money', 'pnl', 'r', 'policy']
                 out = io.StringIO(newline='')
