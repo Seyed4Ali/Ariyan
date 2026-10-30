@@ -1,0 +1,2 @@
+# Preserve exact source bytes and the checksums in BUILD-MANIFEST.json.
+* -text

@@ -1,0 +1,50 @@
+{
+  "host": "127.0.0.1",
+  "port": 8765,
+  "terminal_path": "C:\\Program Files\\MetaTrader 5\\terminal64.exe",
+  "broker_clock": {
+    "mode": "fxpro-eu"
+  },
+  "symbols": {
+    "EURUSD": "EURUSD",
+    "XAUUSD": "GOLD",
+    "BTCUSD": "BITCOIN"
+  },
+  "capital_source": "connected-demo-balance",
+  "poll_seconds": 1,
+  "market_sessions": {
+    "BTCUSD": {
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "start": 0,
+      "end": 24,
+      "rollover": false
+    }
+  },
+  "starting_balance": 10000,
+  "risk_percent": 0.25,
+  "daily_loss_percent": 1.0,
+  "max_drawdown_percent": 5.0,
+  "max_trades_day": 6,
+  "max_consecutive_losses": 3,
+  "cooldown_seconds": 300,
+  "max_hold_seconds": 480,
+  "max_tick_age_seconds": 15,
+  "max_spread_atr": 0.12,
+  "reward_risk": 1.5,
+  "commission_per_lot_roundtrip_usd": 7.0,
+  "slippage_points": 2,
+  "session_start_utc": 7,
+  "session_end_utc": 17,
+  "rollover_start_utc": 20,
+  "rollover_end_utc": 23,
+  "news_buffer_minutes": 20,
+  "auto_apply_shadow_learning": true
+}

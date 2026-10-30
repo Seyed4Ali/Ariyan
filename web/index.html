@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Arian — میز معاملات</title><meta name="description" content="داشبورد محلی آریان برای رصد بازار، معاملات آزمایشی و چک‌لیست یادگیرنده"><link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+<aside class="sidebar">
+  <a class="brand" href="/"><span class="brand-mark">A<span>↗</span></span><span>ARIAN<small>TRADING WORKSPACE</small></span></a>
+  <div class="workspace"><span class="workspace-icon">◈</span><div>میز معاملات آریان<small>Local workspace · v1.0</small></div><span class="tiny-dot"></span></div>
+  <div class="nav-label">فضای کار</div>
+  <nav aria-label="ناوبری اصلی">
+    <button data-view="overview" class="nav active"><span>◫</span>دید کلی<span class="nav-dot"></span></button>
+    <button data-view="agent" class="nav"><span>✧</span>ایجنت و یادگیری<span class="nav-tag">LAB</span></button>
+    <button data-view="journal" class="nav"><span>▤</span>ژورنال معاملات</button>
+    <button data-view="settings" class="nav"><span>⚙</span>اتصال و تنظیمات</button>
+  </nav>
+  <div class="sidebar-bottom"><div class="local-label"><span class="tiny-dot"></span>روی کامپیوتر شما</div><p>داده‌ها و آموخته‌ها در پایگاه‌دادهٔ محلی ذخیره می‌شوند.</p><div class="sidebar-line"></div><div class="profile"><span>ع</span><div>میز شخصی<small>EURUSD · XAUUSD · BTCUSD</small></div><b>↗</b></div></div>
+</aside>
+<main>
+  <header><div class="breadcrumb">فضای کار <span>/</span> <strong id="view-name">دید کلی</strong></div><div class="header-meta"><span id="clock">—</span><span class="separator"></span><span class="mode-pill" id="mode">SHADOW MODE</span></div></header>
+  <div class="content">
+    <div class="title-row"><div><div class="eyebrow">THE DISCIPLINE TO WAIT.</div><h1 id="page-title">هر معامله، با یک دلیل.</h1><p id="page-subtitle">بازار را ببین. ریسک را محدود کن. از نتیجه یاد بگیر.</p></div><div class="title-actions"><button class="button ghost" id="pause-button">توقف ورود</button><button class="button danger-outline" id="flatten-button">توقف و خروج</button></div></div>
+    <div id="api-error" role="alert" hidden></div>
+    <div class="status-strip"><div><span class="status-dot" id="feed-dot"></span><strong id="feed-label">در حال اتصال به موتور محلی</strong><span id="feed-detail">MT5 → Strategy → Risk → Paper</span></div><span id="execution-label">اجرای واقعی خاموش</span></div>
+
+    <section id="overview" class="view">
+      <article class="broker-account"><div><span class="eyebrow">CONNECTED MT5 ACCOUNT</span><h2 id="broker-account-name">در انتظار حساب دموی متاتریدر</h2><small id="broker-account-status">موجودی مستقیماً از حساب متصل خوانده می‌شود</small></div><div><span>بالانس بروکر</span><strong id="broker-balance">—</strong></div><div><span>اکوئیتی بروکر</span><strong id="broker-equity">—</strong></div><div><span>مارجین آزاد</span><strong id="broker-free-margin">—</strong></div></article>
+      <div class="metrics">
+        <article class="metric"><div>سرمایهٔ شبیه‌سازی <span>↗</span></div><strong id="equity">—</strong><small id="balance-detail">حساب محلی · USD</small></article>
+        <article class="metric"><div>سود و زیان امروز <span>◷</span></div><strong id="daily-pnl">—</strong><small>شامل پوزیشن باز · روز UTC</small></article>
+        <article class="metric"><div>افت از اوج سرمایه <span>↘</span></div><strong id="drawdown">—</strong><small>سقف توقف کل: ۵٪</small></article>
+        <article class="metric"><div>معاملات بسته‌شده <span>≋</span></div><strong id="trade-count">—</strong><small id="win-rate">نرخ برد پس از اولین خروج</small></article>
+      </div>
+      <div class="overview-grid">
+        <article class="panel market-panel"><div class="panel-head"><div><span class="eyebrow">MARKET WATCH</span><h2>نبض بازار</h2></div><div class="timeframes"><label for="chart-timeframe">تایم‌فریم نمودار</label><select id="chart-timeframe" aria-label="تایم‌فریم نمودار" dir="ltr"><option>M1</option><option>M2</option><option>M3</option><option>M4</option><option>M5</option><option>M6</option><option>M10</option><option>M12</option><option>M15</option><option>M20</option><option>M30</option><option>H1</option></select></div></div>
+          <div class="market-tabs"><button class="market-tab selected" data-symbol="EURUSD"><span class="asset-icon euro">€</span><span>EUR / USD<small>یورو · دلار آمریکا</small></span><strong id="quote-EURUSD">—</strong></button><button class="market-tab" data-symbol="XAUUSD"><span class="asset-icon gold">Au</span><span>XAU / USD<small>طلا · دلار آمریکا</small></span><strong id="quote-XAUUSD">—</strong></button><button class="market-tab" data-symbol="BTCUSD"><span class="asset-icon bitcoin">₿</span><span>BTC / USD<small>بیت‌کوین · دلار آمریکا</small></span><strong id="quote-BTCUSD">—</strong></button></div>
+          <div class="chart-toolbar"><div><span class="tiny-dot"></span><span id="chart-symbol">EURUSD</span><span class="muted">·</span><span id="chart-bar-label" class="muted">کندل جاری از بروکر</span></div><span id="chart-trend">روند: —</span></div>
+          <div class="chart" id="chart"><div class="chart-empty"><span>⌁</span><strong>منتظر اولین دادهٔ معتبر بازار</strong><p>متاتریدر را باز کن و به حساب بروکر وارد شو.<br>نمودار با قیمت‌های واقعی همان بروکر نمایش داده می‌شود.</p></div></div>
+          <div class="quote-footer"><div>Bid <strong id="bid">—</strong></div><div>Ask <strong id="ask">—</strong></div><div>اسپرد <strong id="spread">—</strong></div><div>آخرین تیک <strong id="tick-age">—</strong></div></div>
+          <div id="timeframe-summary" class="timeframe-summary"></div><p class="footnote">انتخاب تایم‌فریم، نمودار و نمای روند را تغییر می‌دهد. ورود اسکالپ همچنان بر اساس کندل بسته‌شدهٔ M1 و روند M5 است.</p>
+        </article>
+        <article class="panel checklist-panel"><div class="panel-head"><div><span class="eyebrow">BEFORE EVERY ENTRY</span><h2>چک‌لیست ورود</h2></div><span class="counter" id="check-count">۰ / ۰</span></div><div class="decision-box"><span id="decision" class="decision">WAIT</span><p id="decision-reason">بدون دادهٔ تازه، تصمیم ورود صادر نمی‌شود.</p></div><div id="checklist" class="checklist"></div><div class="news-note" id="news-note">تقویم اخبار هنوز بررسی نشده</div><button class="text-button" id="open-calendar">بررسی و ثبت تقویم اخبار ←</button></article>
+      </div>
+      <div class="bottom-grid">
+        <article class="panel"><div class="panel-head"><div><span class="eyebrow">RISK FIRST</span><h2>بودجهٔ ریسک امروز</h2></div><span class="subtle-tag">محافظه‌کارانه</span></div><div class="risk-main"><strong id="risk-used">۰٪</strong><span>از سقف زیان روزانهٔ ۱٪</span></div><progress id="risk-progress" max="1" value="0"></progress><div class="risk-stats"><div><span>هر معامله</span><strong>۰٫۲۵٪</strong></div><div><span>ورود امروز</span><strong id="day-trades">۰ / ۶</strong></div><div><span>زیان متوالی</span><strong id="loss-streak">۰ / ۳</strong></div></div></article>
+        <article class="panel agent-summary"><div class="panel-head"><div><span class="eyebrow">LEARNING, WITH EVIDENCE</span><h2>ایجنت در حال مشاهده است</h2></div><span class="sparkle">✧</span></div><p id="agent-summary">هر خروج، یک دادهٔ تازه. قوانین تازه فقط بعد از اعتبارسنجی وارد حساب شبیه‌سازی می‌شوند.</p><div class="agent-progress-row"><span id="learning-count">۰ از ۱۰۰ معامله</span><span id="policy-version">CHECKLIST v0</span></div><progress id="learning-progress" max="100" value="0"></progress><button class="text-button" data-go="agent">مشاهدهٔ آزمایشگاه یادگیری ←</button></article>
+      </div>
+      <article class="panel positions-panel"><div class="panel-head"><div><span class="eyebrow">OPEN POSITIONS</span><h2>معاملات باز</h2></div><span class="muted">خروج زمانی پس از ۸ دقیقه</span></div><div id="positions"></div></article>
+    </section>
+
+    <section id="agent" class="view" hidden>
+      <div class="agent-hero panel"><span class="sparkle">✧</span><div><span class="eyebrow">CHECKLIST LEARNING AGENT</span><h2>تغییر قانون، پس از شواهد.</h2><p>ایجنت آماری، شرایط زیان‌ده را در معاملات حساب مبنا پیدا می‌کند. ریسک، حد ضرر و مجوز اجرای بروکر را تغییر نمی‌دهد.</p></div><span class="subtle-tag" id="agent-phase">جمع‌آوری داده</span></div>
+      <div class="steps"><article><b>01</b><h3>۷۰ معاملهٔ آموزش</h3><p>پیدا کردن یک وضعیت نامطلوب بر اساس نماد، سشن یا هزینهٔ اسپرد.</p></article><article><b>02</b><h3>۳۰ معاملهٔ اعتبارسنجی</h3><p>بررسی یک‌بارهٔ همان فرضیه؛ حذف معاملات هم‌پوشان با آموزش.</p></article><article><b>03</b><h3>۵۰ معاملهٔ آینده</h3><p>فرضیه قفل می‌شود و منتظر نتیجهٔ معاملات بعدی می‌ماند.</p></article><article><b>04</b><h3>اعمال در شبیه‌سازی</h3><p>فقط با نمونهٔ کافی و نتیجهٔ مثبت؛ امکان بازگشت به قواعد پایه.</p></article></div>
+      <div class="bottom-grid"><article class="panel"><div class="panel-head"><h2>دفتر آموخته‌ها</h2><span id="agent-version">v0</span></div><p id="agent-message"></p><div id="learned-rule" class="rule-box"></div><button class="button ghost" id="rollback-button">بازگشت به چک‌لیست پایه</button></article><article class="panel"><div class="panel-head"><h2>مبنا در برابر ایجنت</h2><span class="subtle-tag">PAPER ONLY</span></div><div class="table-wrap"><table><thead><tr><th>معیار</th><th>قواعد پایه</th><th>با فیلتر ایجنت</th></tr></thead><tbody id="comparison"></tbody></table></div><p class="footnote">دو حساب مستقل با بودجهٔ یکسان؛ تفاوت مسیر ورودها می‌تواند باعث اختلاف نمونه‌ها شود. این مقایسه دلیل قطعی رابطهٔ علت و معلولی نیست.</p></article></div>
+      <article class="panel"><h2>قواعد ثابت</h2><p class="body-copy">ریسک هر معامله حداکثر ۰٫۲۵٪، سقف زیان روزانه ۱٪، سقف افت ۵٪، حداکثر یک پوزیشن و شش ورود در روز. افزایش حجم بعد از ضرر، مارتینگل و جابه‌جایی حد ضرر برای فرار از زیان در این موتور پیاده نشده‌اند.</p><p class="footnote">دادهٔ تیک بروکر، سفارش یا هویت «نهنگ» را آشکار نمی‌کند. شکار نقدینگی یک فرضیهٔ مبتنی بر رفتار قیمت است. این ایجنت مدل زبانی نیست و درصد احتمال برد ادعا نمی‌کند.</p></article>
+      <article class="panel"><div class="panel-head"><div><span class="eyebrow">HISTORICAL RESEARCH · SEPARATE LEDGER</span><h2>آزمایش اولیهٔ EURUSD و XAUUSD</h2></div><span class="subtle-tag">بدون فیلتر اخبار</span></div><div id="research-results" class="config-grid"><p class="body-copy">گزارش آزمایش اولیه هنوز آماده نشده است.</p></div><p class="footnote">نمونهٔ قبلی با سرمایهٔ فرضی ۱۰٬۰۰۰ دلار؛ بیت‌کوین در این آزمایش نبوده است. بازپخش کندل M1 با اسپرد در سطح کندل و هزینهٔ فرضی؛ در برخورد هم‌زمان به هدف و حد ضرر، حد ضرر مقدم است. این نمونهٔ کوچک اثبات سودآوری نیست و به حافظهٔ زندهٔ ایجنت وارد نمی‌شود.</p></article>
+    </section>
+
+    <section id="journal" class="view" hidden>
+      <article class="panel"><div class="panel-head"><div><span class="eyebrow">EVERY TRADE HAS A RECORD</span><h2>ژورنال معاملات</h2></div><a class="button ghost" href="/api/export" download>دریافت CSV ↓</a></div><div class="table-wrap" id="trade-history"></div></article>
+      <article class="panel activity-panel"><div class="panel-head"><h2>رویدادها و دلیل تصمیم‌ها</h2><span class="muted">۴۰ رویداد آخر</span></div><div id="events"></div></article>
+    </section>
+
+    <section id="settings" class="view" hidden>
+      <div class="bottom-grid"><article class="panel"><span class="eyebrow">LOCAL CONNECTION</span><h2>اتصال به متاتریدر</h2><div id="connection-details" class="details"></div><p class="body-copy">متاتریدر همین کامپیوتر را باز کن و به حساب بروکر وارد شو. نمادهای دقیق و مسیر ترمینال در فایل <code>config.json</code> قابل تنظیم‌اند. گذرواژه در داشبورد دریافت یا ذخیره نمی‌شود.</p></article><article class="panel"><span class="eyebrow">BROKER DEMO EXECUTION</span><h2>اجرای خودکار روی حساب دمو</h2><p class="body-copy">برای حساب دموی اختصاصی با ارز USD، Algo Trading باید فعال باشد. چک‌لیست پایه اجرا می‌شود؛ قوانین یادگرفته‌شده فقط در شبیه‌سازی اعمال می‌شوند. با راه‌اندازی مجدد یا قطع اتصال، اجازهٔ ورود بروکر خاموش می‌شود.</p><label for="demo-confirm">برای فعال‌سازی کلمهٔ DEMO را وارد کن</label><div class="inline-form"><input id="demo-confirm" placeholder="DEMO" dir="ltr" autocomplete="off"><button id="demo-arm" class="button primary">فعال‌سازی دمو</button></div><button class="text-button" id="demo-disarm">خاموش کردن ورود بروکر</button><p class="footnote">حساب واقعی در لایهٔ ارسال سفارش مسدود است. این نسخه سرویس همیشه‌روشن نیست؛ کامپیوتر و متاتریدر باید روشن بمانند. حد ضرر و حد سود بروکر بعد از قطع برنامه برقرار می‌مانند؛ خروج زمانی به اجرای برنامه نیاز دارد.</p></article></div>
+      <article class="panel"><div class="panel-head"><h2>تنظیمات فعلی موتور</h2><span class="subtle-tag">ثابت تا راه‌اندازی بعدی</span></div><div id="config-details" class="config-grid"></div></article>
+    </section>
+    <footer><span>ARIAN / TRADING LAB</span><span>بازده تضمین‌شده نیست. هزینه، لغزش و شرایط بازار بر نتیجه اثر می‌گذارند.</span><span id="last-update">—</span></footer>
+  </div>
+</main>
+<dialog id="calendar-dialog"><form id="calendar-form"><div class="panel-head"><div><span class="eyebrow">ECONOMIC CALENDAR</span><h2>ثبت بررسی تقویم اخبار</h2></div><button type="button" class="icon-button" id="close-calendar" aria-label="بستن">×</button></div><p class="body-copy">فید خودکار اخبار متصل نیست. تقویم EUR و USD را بررسی کن و خبرهای مهم را اینجا ثبت کن. ورود از ۲۰ دقیقه قبل تا ۲۰ دقیقه بعد از هر رویداد مسدود است.</p><label for="news-events">هر خط: زمان UTC | ارز | نام خبر</label><textarea id="news-events" rows="5" dir="ltr" placeholder="2026-10-30T12:30 | USD | Economic release"></textarea><label for="news-until">بررسی تا چه زمانی معتبر است؟ (UTC، حداکثر ۲۴ ساعت)</label><input type="datetime-local" id="news-until" required dir="ltr"><label class="checkbox-label"><input id="news-reviewed" type="checkbox" required>تقویم EUR و USD را بررسی کرده‌ام؛ رویدادهای مهم را ثبت کرده‌ام.</label><button type="submit" class="button primary wide">ذخیرهٔ بررسی تقویم</button><p class="footnote">خالی بودن فهرست فقط وقتی معتبر است که در بازهٔ بررسی، خبر مهمی وجود نداشته باشد.</p></form></dialog>
+<div id="toast" role="status" hidden></div>
+</body></html>
