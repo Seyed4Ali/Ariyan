@@ -132,6 +132,12 @@ class FastDemoTests(unittest.TestCase):
         e.feed.call.return_value=dict(ok=True,uncertain=False,order=11,price=TICK['ask'],volume=.1)
         e.maybe_open_demo(dict(CANDIDATE,cycle_id='next',signal_time=NOW+60),dict(TICK,time=NOW+60),SPEC,feed,{'ok':True},True,NOW+60)
         self.assertEqual(e.feed.call.call_count,2)
+    def test_risk_stop_is_visible_even_without_a_new_strategy_candidate(self):
+        e=Engine(CONFIG,self.path)
+        e.feed_state=dict(connected=True,identity='d:1')
+        with patch.object(e,'demo_metrics',return_value=dict(daily_drawdown_percent=0,drawdown_percent=0,
+                consecutive_losses=3,trades_today=4,open_count=0,last_exit=0)):
+            self.assertTrue(any('متوالی' in reason for reason in e.demo_blockers(NOW)))
     def test_scalp_uses_distinct_closed_bar_cycles_and_retains_trend_filter(self):
         m1=[Bar(NOW-120*60+i*60,1.1+i*.00002,1.1001+i*.00002,1.0999+i*.00002,1.1+i*.00002) for i in range(120)]
         m1[-2]=Bar(NOW-120,1.1023,1.10245,1.1021,1.10235)

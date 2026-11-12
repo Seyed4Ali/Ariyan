@@ -527,6 +527,25 @@ class Engine:
             self.store.event(now, 'CONTROL', dict(action=action))
             return dict(ok=True)
 
+    def demo_blockers(self, now):
+        f = self.feed_state
+        if not f.get('connected') or not f.get('identity'):
+            return []
+        m = self.demo_metrics(f, now)
+        reasons = []
+        for key, limit, reason in (
+                ('daily_drawdown_percent','daily_loss_percent','سقف زیان روزانه فعال است'),
+                ('drawdown_percent','max_drawdown_percent','سقف افت سرمایه فعال است'),
+                ('consecutive_losses','max_consecutive_losses','توقف حفاظتی پس از زیان‌های متوالی امروز'),
+                ('trades_today','max_trades_day','سقف تعداد ورود امروز پر شده است')):
+            if m[key] >= self.config[limit]:
+                reasons.append(reason)
+        if m['open_count']:
+            reasons.append('تا بسته‌شدن پوزیشن یا سفارش جاری، ورود بعدی منتظر می‌ماند')
+        if now-m['last_exit'] < self.config['cooldown_seconds']:
+            reasons.append('فاصلهٔ پس از آخرین خروج هنوز تمام نشده است')
+        return reasons
+
     def snapshot(self):
         with self.lock:
             now = self.clock.now()
@@ -572,5 +591,5 @@ class Engine:
                         + (['ساعت شبکه هنوز تأیید نشده است'] if not self.clock.ready() else [])
                         + (['ورود متوقف است'+(': '+self.pause_reason if self.pause_reason else '')] if self.paused else [])
                         + (['زمان تیک از ساعت دستگاه جلوتر است؛ همگام‌سازی ساعت را بررسی کنید'] if any(m.get('tick',{}).get('time',0)>now+2 for m in self.markets.values()) else []) + (['اجرای بروکر فعال نشده است'] if not self.demo_identity else [])
-                        + ([] if news_status(self.store,now,self.config['news_buffer_minutes'],self.config.get('news_mode')=='automatic')['ok'] else ['اخبار معتبر نیست یا در محدودهٔ توقف خبر هستیم'])),
+                        + ([] if news_status(self.store,now,self.config['news_buffer_minutes'],self.config.get('news_mode')=='automatic')['ok'] else ['اخبار معتبر نیست یا در محدودهٔ توقف خبر هستیم']) + self.demo_blockers(now)),
                 supported_timeframes=list(TIMEFRAMES)))
