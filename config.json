@@ -11,6 +11,10 @@
     "BTCUSD": "BITCOIN"
   },
   "capital_source": "connected-demo-balance",
+  "observed_magic_numbers": [
+    777888
+  ],
+  "tracking_history_days": 30,
   "poll_seconds": 1,
   "market_sessions": {
     "BTCUSD": {
@@ -46,5 +50,6 @@
   "rollover_start_utc": 20,
   "rollover_end_utc": 23,
   "news_buffer_minutes": 20,
-  "auto_apply_shadow_learning": true
+  "auto_apply_shadow_learning": true,
+  "runtime_clock": "https-verified"
 }

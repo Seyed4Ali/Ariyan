@@ -41,7 +41,7 @@ def entry_checks(now, tick, candidate, config, metrics, news, paused, learned):
     return [
         dict(id="feed", label="قیمت زنده و کندل تازه", ok=0 <= age <= config['max_tick_age_seconds'] and 0 <= bar_age <= 75),
         dict(id="session", label="بازهٔ ورود بیت‌کوین؛ مشروط به خوراک تازهٔ بروکر" if candidate['symbol']=='BTCUSD' else
-             "بازهٔ معاملاتی ۰۷–۱۷ UTC؛ روز کاری", ok=trade_window(now, config, candidate['symbol'])),
+             f"بازهٔ معاملاتی {config['session_start_utc']:02}–{config['session_end_utc']:02} UTC؛ روز کاری", ok=trade_window(now, config, candidate['symbol'])),
         dict(id="spread", label="اسپرد حداکثر ۱۲٪ ATR", ok=0 <= spread <= candidate['atr'] * config['max_spread_atr']),
         dict(id="news", label="تقویم اخبار بررسی‌شده و خارج از محدودهٔ خبر", ok=news['ok']),
         dict(id="daily", label="افت امروز کمتر از سقف روزانه", ok=metrics['daily_drawdown_percent'] < config['daily_loss_percent']),
@@ -49,7 +49,7 @@ def entry_checks(now, tick, candidate, config, metrics, news, paused, learned):
         dict(id="streak", label="زیان متوالی کمتر از حد توقف", ok=metrics['consecutive_losses'] < config['max_consecutive_losses']),
         dict(id="count", label="تعداد ورود امروز کمتر از سقف", ok=metrics['trades_today'] < config['max_trades_day']),
         dict(id="position", label="حداکثر یک پوزیشن بین همهٔ نمادها", ok=metrics['open_count'] == 0),
-        dict(id="cooldown", label="فاصلهٔ پنج دقیقه از آخرین خروج", ok=now - metrics['last_exit'] >= config['cooldown_seconds']),
+        dict(id="cooldown", label=f"فاصلهٔ {config['cooldown_seconds']} ثانیه از آخرین خروج", ok=now - metrics['last_exit'] >= config['cooldown_seconds']),
         dict(id="pause", label="اجازهٔ ورود فعال است", ok=not paused),
         dict(id="learned", label="چک‌لیست یادگرفته‌شدهٔ نسخهٔ جاری", ok=learned),
     ]

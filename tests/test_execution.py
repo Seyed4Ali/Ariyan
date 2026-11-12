@@ -19,7 +19,7 @@ class BrokerGateTests(unittest.TestCase):
             account_info=lambda:SimpleNamespace(server='test',login=1,currency='USD',trade_mode=0,
                 equity=10000,balance=10000,trade_allowed=True),ACCOUNT_TRADE_MODE_DEMO=1,
             order_send=Mock())
-        with patch.dict('sys.modules',{'MetaTrader5':module}):
+        with patch.dict('sys.modules',{'MetaTrader5':module}), patch('arian.mt5_worker.terminal_is_running',return_value=True):
             with self.assertRaisesRegex(ValueError,'دمو'):
                 worker_run(dict(terminal_path='unused',action='demo_open',identity='test:1'))
         module.order_send.assert_not_called()

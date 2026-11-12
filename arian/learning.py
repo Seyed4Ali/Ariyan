@@ -68,6 +68,8 @@ class Learner:
                     self.state.update(active=candidate, version=self.state['version'] + 1,
                                       message='فیلتر پس از ۵۰ معاملهٔ آینده فقط در حساب شبیه‌سازی اعمال شد')
                     self.store.event(now, 'POLICY_APPLIED_PAPER_ONLY', candidate)
+                elif passed:
+                    self.state['message'] = 'فرضیه در آزمون آینده تأیید شد؛ این منبع فقط رصد می‌شود و مجوز تغییر اکسپرت ندارد'
                 else:
                     self.state['message'] = 'فرضیه در آزمون آینده تأیید نشد؛ چک‌لیست پایه ادامه دارد'
                 self.store.policy(candidate)

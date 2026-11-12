@@ -15,6 +15,7 @@ from arian.engine import Engine
 from arian.clock import broker_offset, broker_to_utc
 
 CONFIG = json.loads((Path(__file__).resolve().parents[1] / 'config.json').read_text())
+CONFIG["runtime_clock"] = "system"
 NOW = 1793347200  # Fri 2026-10-30 08:00 UTC
 SPEC = dict(symbol='EURUSD', factor=100000, point=.00001, tick_size=.00001,
             digits=5, volume_min=.01, volume_max=100, volume_step=.01, stops_level=0)

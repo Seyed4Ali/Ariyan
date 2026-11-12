@@ -3,12 +3,25 @@ import json
 import math
 import sys
 import time
+from pathlib import Path
 from datetime import datetime, timezone
 from .clock import broker_to_utc, broker_offset
 from .timeframes import TIMEFRAMES, price_bar
+from .execution_audit import audit_fill
+from .windows_process import terminal_is_running
+
+
+def request_now(request):
+    offset=float(request.get('verified_utc_offset_seconds',0))
+    if not math.isfinite(offset) or abs(offset)>600:
+        raise ValueError('Invalid verified UTC correction')
+    return time.time()+offset
 
 
 def run(request):
+    if not terminal_is_running(request['terminal_path']):
+        return dict(connected=False,terminal_closed=True,
+                    error='متاتریدر بسته است؛ برنامه به‌صورت خودکار باز نمی‌شود')
     import MetaTrader5 as mt5
     if not mt5.initialize(path=request['terminal_path'], timeout=5000):
         return dict(connected=False, error=f"MT5: {mt5.last_error()}")
@@ -21,14 +34,15 @@ def run(request):
         if clock.get('mode') == 'fxpro-eu' and not ai.server.startswith('FxPro-'):
             raise ValueError('پروفایل ساعت FxPro با بروکر جاری سازگار نیست؛ تنظیمات ساعت را اصلاح کنید')
         status = dict(connected=True, server=ai.server, currency=ai.currency,
+                      common_files_path=str(Path(ti.commondata_path)/'Files') if getattr(ti,'commondata_path',None) else None,
                       demo=ai.trade_mode == mt5.ACCOUNT_TRADE_MODE_DEMO,
                       identity=identity, equity=ai.equity, balance=ai.balance,
                       account_login=ai.login, profit=getattr(ai,'profit',0),
                       margin_free=getattr(ai,'margin_free',ai.equity),
                       trade_allowed=bool(ti.trade_allowed and ai.trade_allowed and not ti.tradeapi_disabled),
-                      broker_offset_seconds=broker_offset(time.time(),clock))
+                      broker_offset_seconds=broker_offset(request_now(request),clock))
         action = request.get('action', 'snapshot')
-        if action != 'snapshot':
+        if action not in ('snapshot', 'audit'):
             # Account switching, including demo -> real, cannot carry an armed session.
             if not status['demo'] or request.get('identity') != identity:
                 raise ValueError('ارسال سفارش فقط روی همان حساب دمو مجاز است')
@@ -36,7 +50,7 @@ def run(request):
                 raise ValueError('Algo Trading غیرفعال است یا ارز حساب USD نیست')
             return send_demo(mt5, request, status)
         markets = {}
-        for canonical, symbol in request['symbols'].items():
+        for canonical, symbol in (request['symbols'].items() if action == 'snapshot' else []):
             if not mt5.symbol_select(symbol, True):
                 markets[canonical] = dict(error=f"نماد {symbol} در بروکر یافت نشد؛ نام را در تنظیمات اصلاح کنید")
                 continue
@@ -66,13 +80,39 @@ def run(request):
             raise ValueError('دریافت وضعیت پوزیشن/سفارش ناموفق؛ ورود مسدود')
         status['positions'] = [p._asdict() for p in positions]
         status['orders_count'] = len(orders)
+        status['observed_orders'] = [o._asdict() for o in orders if o.magic in request.get('observed_magic_numbers',[])]
         since = request.get('history_since', time.time() - 30 * 86400)
         deals = mt5.history_deals_get(datetime.fromtimestamp(since-86400, timezone.utc),
                                      datetime.fromtimestamp(time.time()+86400,timezone.utc))
+        # Keep all exits of an owned position, including manual exits (magic=0).
+        magics = {20261030, *request.get('observed_magic_numbers', [])}
+        owned = {p.identifier for p in positions if p.magic in magics}
+        if deals is not None:
+            owned.update(d.position_id for d in deals if d.magic in magics and d.entry in (0, 2))
         status['deals'] = None if deals is None else [dict(d._asdict(),
             time=broker_to_utc(d.time,clock), time_msc=broker_to_utc(d.time_msc/1000,clock)*1000)
-            for d in deals if d.magic == 20261030]
-        return dict(**status, markets=markets, fetched=time.time())
+            for d in deals if d.position_id in owned]
+        history_orders = mt5.history_orders_get(datetime.fromtimestamp(since-86400, timezone.utc),
+                                                datetime.fromtimestamp(time.time()+86400, timezone.utc))
+        status['tracking_history_complete']=deals is not None and history_orders is not None
+        status['tracking_orders'] = [] if history_orders is None else [o._asdict() for o in history_orders
+            if o.magic in magics and o.position_id in owned]
+        audits = {}
+        skipped = set(request.get('audited_positions',[]))
+        entries = [] if deals is None else [d for d in deals if d.entry==0 and d.magic in request.get('observed_magic_numbers',[])
+                                           and str(d.position_id) not in skipped]
+        # Historical tick downloads must never block the live snapshot.
+        for deal in (entries[:2] if action == 'audit' else []):
+            stamp = deal.time_msc/1000
+            ticks = mt5.copy_ticks_range(deal.symbol,datetime.fromtimestamp(stamp-1,timezone.utc),
+                                        datetime.fromtimestamp(stamp+1,timezone.utc),mt5.COPY_TICKS_ALL)
+            spec = mt5.symbol_info(deal.symbol)
+            rows = [] if ticks is None else [dict(time_msc=int(t['time_msc']),bid=float(t['bid']),ask=float(t['ask'])) for t in ticks]
+            audits[str(deal.position_id)] = audit_fill(deal._asdict(),rows,
+                dict(point=spec.point,tick_size=spec.trade_tick_size) if spec else {})
+            audits[str(deal.position_id)]['checked_at'] = time.time()
+        status['execution_audits'] = audits
+        return dict(**status, markets=markets, fetched=request_now(request))
     finally:
         mt5.shutdown()
 
@@ -82,7 +122,7 @@ def send_demo(mt5, request, status):
     command = request['command']
     symbol = command['broker_symbol']
     info, tick = mt5.symbol_info(symbol), mt5.symbol_info_tick(symbol)
-    if not info or not tick or not 0 <= time.time() - broker_to_utc(tick.time_msc / 1000,request.get('broker_clock',{'mode':'utc'})) <= 15:
+    if not info or not tick or not 0 <= request_now(request) - broker_to_utc(tick.time_msc / 1000,request.get('broker_clock',{'mode':'utc'})) <= 15:
         raise ValueError('قیمت معتبر و تازه نیست')
     positions, orders = mt5.positions_get(), mt5.orders_get()
     if positions is None or orders is None:
@@ -142,8 +182,10 @@ def send_demo(mt5, request, status):
 
 
 if __name__ == '__main__':
+    request = {}
     try:
-        result = run(json.load(sys.stdin))
+        request = json.load(sys.stdin)
+        result = run(request)
     except Exception as e:
-        result = dict(connected=False, error=str(e))
+        result = dict(connected=False, error=str(e), uncertain=request.get('action','snapshot') not in ('snapshot','audit'))
     sys.stdout.write(json.dumps(result, ensure_ascii=True, allow_nan=False))
