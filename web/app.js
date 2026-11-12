@@ -93,6 +93,7 @@ async function control(action,extra={}){
 }
 $('pause-button').addEventListener('click',()=>control(state?.monitoring===false?'monitor_resume':state?.paused?'resume':'pause'));
 $('flatten-button').addEventListener('click',()=>control('flatten'));
+$('demo-daily-stops-toggle').addEventListener('click',()=>control('demo_daily_stops',{enabled:state?.execution?.daily_stops?.enabled===false}));
 $('fast-profile').addEventListener('click',()=>control('set_profile',{profile:'fast-demo'}));
 $('ea-start').addEventListener('click',()=>control('ea_resume'));
 $('risk-budget-toggle').addEventListener('click',()=>control('risk_budget',{enabled:state?.ea_control?.risk_budget_enabled===false}));
@@ -173,6 +174,7 @@ function render(){
   const observed=metricsSource==='external-ea',demo=metricsSource==='broker-demo',tracking=state.tracking;
   setText('execution-health',`${state.execution?.profile||'conservative'} · ${state.mode} · ${(state.execution?.blockers||[]).join(' · ')||'موتور فعال؛ در انتظار ستاپ معتبر'}`);
   const a=observed?(tracking?.metrics||{daily_pnl:null,drawdown_percent:null,closed_count:0,win_rate:null,daily_drawdown_percent:0,trades_today:0,consecutive_losses:0}):demo?(state.demo_account||state.account):state.account;
+  const dailyStopsEnabled=state.execution?.daily_stops?.enabled!==false;
   const l=observed?(tracking?.learner||{phase:'collecting',version:0,message:'در انتظار دریافت معاملات اکسپرت آریان'}):state.learner,c=state.connection;
   setText('broker-account-name',c.connected?`${c.server} · ${c.account_login||'—'}`:'حساب متاتریدر متصل نیست');
   setText('broker-account-status',c.connected?`${c.demo?'حساب دمو':'حساب واقعی · فقط خواندن'} · ${c.currency} · ${c.trade_allowed?'Algo Trading روشن':'Algo Trading خاموش'}`:'برای خواندن موجودی و قیمت، متاتریدر را متصل نگه دار');
@@ -184,6 +186,10 @@ function render(){
   setText('equity-label',observed?'سرمایهٔ منتسب به اکسپرت':demo?'اکوئیتی حساب دمو':'سرمایهٔ شبیه‌سازی');
   if(demo)setText('balance-detail',`دفتر ریسک ${state.risk_session?'آزمون تازه':'حساب'} · مبنا: ${money(a.initial)} · بالانس بروکر: ${money(a.balance)}`);
   if(observed)setText('balance-detail',`مبنای رصد + نتیجهٔ اکسپرت · بالانس دفتر: ${money(a.balance)}`);
+  $('demo-daily-stops-toggle').disabled=!(c.connected&&c.demo&&c.currency==='USD'&&state.clock?.ready);
+  $('demo-daily-stops-toggle').setAttribute('aria-checked',String(dailyStopsEnabled));
+  setText('demo-daily-stops-toggle',dailyStopsEnabled?'لغو توقف روزانه و زیان متوالی':'فعال‌کردن دوبارهٔ توقف روزانه و زیان متوالی');
+  setText('demo-daily-stops-note',(dailyStopsEnabled?'توقف زیان روزانه و زیان متوالی روشن است.':'هر دو توقف برای این نشست حساب دمو خاموش‌اند؛ زیان روزانه و تعداد زیان‌ها همچنان ثبت می‌شوند.')+' حد ضرر هر معامله، سقف افت کل، سقف تعداد ورود و فاصلهٔ بین معاملات برقرارند. پس از قطع اتصال، تغییر حساب یا راه‌اندازی مجدد، توقف‌ها روشن می‌شوند. این دکمه به‌تنهایی مجوز معامله را فعال نمی‌کند.');
   const bridge=state.ea_control;
   const budgetEnabled=bridge?.risk_budget_enabled!==false;
   $('risk-budget-toggle').hidden=!observed;
@@ -217,10 +223,10 @@ function render(){
   setText('risk-used',`${num(a.daily_drawdown_percent)}%`);$('risk-progress').value=Math.min(1,a.daily_drawdown_percent||0);
   setText('open-risk',observed?`ریسک اولیهٔ باز: ${money(a.open_risk_money)} · آخرین ورود: ${money(a.last_risk_money)} (${num(a.last_risk_percent)}٪ از موجودی دفتر پیش از ورود)`:'ریسک هر ورود شبیه‌سازی حداکثر ۰٫۲۵٪');
   setText('drawdown-note',observed?(budgetEnabled?'افت دفتر اکسپرت از اوج رصدشده؛ سقف ورود: ۵٪':'افت دفتر اکسپرت؛ سقف افت خاموش است'):'سقف توقف کل: ۵٪');
-  setText('day-trades',observed?fa(a.trades_today):`${fa(a.trades_today)} / ${fa(state.config.max_trades_day)}`);setText('loss-streak',observed?fa(a.consecutive_losses):`${fa(a.consecutive_losses)} / ${fa(state.config.max_consecutive_losses)}`);
+  setText('day-trades',observed?fa(a.trades_today):`${fa(a.trades_today)} / ${fa(state.config.max_trades_day)}`);setText('loss-streak',observed?fa(a.consecutive_losses):`${fa(a.consecutive_losses)} / ${demo&&!dailyStopsEnabled?'توقف خاموش':fa(state.config.max_consecutive_losses)}`);
   setText('risk-per-trade',observed?`${num(a.open_risk_percent)}٪`:fa(state.config.risk_percent)+'٪');
   setText('risk-per-trade-label',observed?'ریسک اولیهٔ باز':'هر معامله');
-  setText('risk-cap-note',observed?(budgetEnabled?'زیان خالص امروز؛ سقف ورود: ۱٪':'زیان خالص امروز؛ سقف زیان خاموش است'):'از سقف زیان روزانهٔ ۱٪');
+  setText('risk-cap-note',observed?(budgetEnabled?'زیان خالص امروز؛ سقف ورود: ۱٪':'زیان خالص امروز؛ سقف زیان خاموش است'):demo&&!dailyStopsEnabled?'توقف زیان روزانه خاموش است':'از سقف زیان روزانهٔ ۱٪');
   setText('execution-label',state.monitoring===false?'پایش متوقف است؛ ترمینال خودکار باز نمی‌شود':state.flatten_pending?'خروج در انتظار تأیید اکسپرت یا بسته‌شدن پوزیشن‌ها':observed?(bridge?.running_requested?(ready?.allowed?'شروع درخواست شده؛ وضعیت هر چارت را بررسی کن':'شروع درخواست شده؛ ورود با محدودیت ریسک مسدود است'):bridge?.acknowledged?'توقف اکسپرت تأیید شده':'منتظر تأیید اکسپرت'):state.mode==='DEMO'?'ورود خودکار فقط روی دمو فعال است':'اجرای واقعی پایتون خاموش');
   setText('agent-summary',l.message);setText('policy-version',`CHECKLIST v${l.version}`);setText('agent-version',`v${l.version}`);
   const progress=l.phase==='forward'?l.forward_count||0:l.collection_count||0,goal=l.phase==='forward'?50:100;
@@ -240,7 +246,7 @@ function render(){
   $('events').innerHTML=state.events.map(e=>`<div class="event"><time>${time(e.ts)}</time><div><b>${esc(eventNames[e.kind]||e.kind)}</b><p>${esc([e.payload.symbol,e.payload.decision,e.payload.reason,e.payload.message,e.payload.action,e.payload.status,e.payload.pnl!==undefined?money(e.payload.pnl):''].filter(Boolean).join(' · '))}</p></div></div>`).join('');
   const details=[['وضعیت',c.connected?'متصل':'قطع'],['سرور',c.server||'—'],['شماره حساب',c.account_login||'—'],['نوع حساب',c.connected?(c.demo?'Demo':'Real · فقط خواندن'):'—'],['ارز',c.currency||'—'],['بالانس بروکر',money(c.balance)],['اکوئیتی بروکر',money(c.equity)],['سرمایهٔ اولیهٔ هم‌اندازه',money(state.capital_binding?.initial)],['Algo Trading',c.trade_allowed?'روشن':'خاموش'],['مجوز ورود بروکر',state.mode==='DEMO'?'فعال · فقط دمو':'خاموش']];
   $('connection-details').innerHTML=details.map(([key,value])=>`<div><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');
-  const cfg=state.config,configs=[['ریسک هر معامله',cfg.risk_percent+'٪'],['توقف روزانه',cfg.daily_loss_percent+'٪'],['افت مجاز',cfg.max_drawdown_percent+'٪'],['حداکثر نگهداری',cfg.max_hold_seconds/60+' دقیقه'],['نسبت هدف به ریسک',cfg.reward_risk+'R'],['هزینهٔ فرضی رفت‌وبرگشت',cfg.commission_per_lot_roundtrip_usd+' USD / lot'],['لغزش هر سمت',cfg.slippage_points+' point'],['نماد یورو',cfg.symbols.EURUSD],['نماد طلا',cfg.symbols.XAUUSD],['نماد بیت‌کوین',cfg.symbols.BTCUSD],['بازهٔ ورود FX و طلا',`${cfg.session_start_utc}:00–${cfg.session_end_utc}:00 UTC`],['بازهٔ بررسی بیت‌کوین','تمام روزها · تابع خوراک بروکر'],['فاصله از خبر','±20 دقیقه'],['سقف ورود روزانه',cfg.max_trades_day],['فاصلهٔ بعد از خروج',cfg.cooldown_seconds+' ثانیه'],['پروفایل',cfg.execution_profile]];
+  const cfg=state.config,configs=[['ریسک هر معامله',cfg.risk_percent+'٪'],['توقف روزانه',dailyStopsEnabled?cfg.daily_loss_percent+'٪':'خاموش برای نشست دمو'],['توقف زیان متوالی',dailyStopsEnabled?cfg.max_consecutive_losses:'خاموش برای نشست دمو'],['افت مجاز',cfg.max_drawdown_percent+'٪'],['حداکثر نگهداری',cfg.max_hold_seconds/60+' دقیقه'],['نسبت هدف به ریسک',cfg.reward_risk+'R'],['هزینهٔ فرضی رفت‌وبرگشت',cfg.commission_per_lot_roundtrip_usd+' USD / lot'],['لغزش هر سمت',cfg.slippage_points+' point'],['نماد یورو',cfg.symbols.EURUSD],['نماد طلا',cfg.symbols.XAUUSD],['نماد بیت‌کوین',cfg.symbols.BTCUSD],['بازهٔ ورود FX و طلا',`${cfg.session_start_utc}:00–${cfg.session_end_utc}:00 UTC`],['بازهٔ بررسی بیت‌کوین','تمام روزها · تابع خوراک بروکر'],['فاصله از خبر','±20 دقیقه'],['سقف ورود روزانه',cfg.max_trades_day],['فاصلهٔ بعد از خروج',cfg.cooldown_seconds+' ثانیه'],['پروفایل',cfg.execution_profile]];
   $('config-details').innerHTML=configs.map(([key,value])=>`<div class="config-item"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');
   if(state.research){const r=state.research;const values=[['تعداد کندل',fa(r.bars)],['معاملات بسته',fa(r.metrics.closed_count)],['سود و زیان خالص',money(r.metrics.pnl)],['بیشترین افت',num(r.max_drawdown_percent)+'%'],['نرخ برد',num(r.metrics.win_rate,1)+'%'],['میانگین نتیجه',num(r.metrics.expectancy_r)+'R'],['شروع داده',date(r.data_start)],['پایان داده',date(r.data_end)]];$('research-results').innerHTML=values.map(([key,value])=>`<div class="config-item"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');}
   setText('hold-label','خروج زمانی پایتون: '+fa(state.config.max_hold_seconds/60)+' دقیقه؛ اکسپرت مستقل است');

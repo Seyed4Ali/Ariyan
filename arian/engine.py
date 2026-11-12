@@ -9,7 +9,7 @@ from .feed import MT5Feed
 from .storage import Store
 from .strategy import Bar, analyze, ema, atr, valid_bars
 from .timeframes import TIMEFRAMES
-from .risk import entry_checks, session_key
+from .risk import entry_checks, session_key, effective_risk_percent
 from .paper import PaperBroker
 from .learning import Learner
 from .news import news_status, save_calendar
@@ -38,6 +38,7 @@ class Engine:
         self.ea_control = EAControl(self.store,config.get('observed_magic_numbers',[]),config['symbols'].values())
         self.demo_identity = None  # restart ALWAYS disarms broker execution
         self.risk_override_identity = None  # session-only, scoped to the current demo account
+        self.daily_stops_override_identity = None
         self.feed_state = dict(connected=False, error='در حال بررسی ارتباط با متاتریدر…')
         self.markets = {}
         self.last_error = None
@@ -228,6 +229,9 @@ class Engine:
             self.risk_override_identity=None
         self.feed_state = feed
         self.updated = now
+        if (not feed.get('connected') or not feed.get('demo') or feed.get('currency') != 'USD'
+                or feed.get('identity') != self.daily_stops_override_identity):
+            self.daily_stops_override_identity = None
         if not feed.get('connected'):
             self.ea_control.renew(dict(allowed=False,reasons=['ارتباط متاتریدر قطع است']),self.config['risk_percent'])
             self.demo_identity = None
@@ -283,7 +287,7 @@ class Engine:
                     (tick['ask'] - tick['bid']) / candidate['atr'] > .07 else 'tight')
                 metrics = self.demo_metrics(feed, now) if self.demo_identity else self.paper.metrics(now)
                 learned = self.learner.allow(candidate['features'])
-                checks = entry_checks(now, tick, candidate, self.config, metrics, news, self.paused, True if self.demo_identity else learned)
+                checks = entry_checks(now, tick, candidate, self.demo_risk_config() if self.demo_identity else self.config, metrics, news, self.paused, True if self.demo_identity else learned)
                 checks.append(dict(id='m5fresh', label='کندل M5 تازه است', ok=fresh))
                 report['checks'].extend(checks)
                 fail = next((c for c in checks if not c['ok']), None)
@@ -339,7 +343,8 @@ class Engine:
 
     def maybe_open_demo(self, candidate, tick, spec, feed, news, fresh, now):
         metrics = self.demo_metrics(feed, now)
-        checks = entry_checks(now, tick, candidate, self.config, metrics, news, self.paused, True)
+        risk_config = self.demo_risk_config()
+        checks = entry_checks(now, tick, candidate, risk_config, metrics, news, self.paused, True)
         if not self.clock.ready() or not fresh or not feed['demo'] or not all(c['ok'] for c in checks):
             return dict(ok=False, reason=next((c['label'] for c in checks if not c['ok']), 'خوراک یا ساعت معتبر نیست'))
         stream = self.demo_stream(feed['identity'])
@@ -352,8 +357,7 @@ class Engine:
             self.demo_identity = None
             return
         planner = PaperBroker(self.store, self.config, stream)
-        demo_config = dict(self.config, risk_percent=min(self.config['risk_percent'],
-            max(0, self.config['daily_loss_percent'] - metrics['daily_drawdown_percent'])))
+        demo_config = dict(risk_config, risk_percent=effective_risk_percent(risk_config, metrics))
         planner.config = demo_config
         planned = planner.open(candidate, tick, spec, now, policy='fixed-base-demo', equity=feed['equity'], persist=False, metrics=metrics)
         if not planned:
@@ -381,6 +385,15 @@ class Engine:
                 self.demo_identity = None
         self.store.save_trade(planned)
         return dict(ok=bool(result.get('ok')), reason='سفارش دموی بروکر پذیرفته شد' if result.get('ok') else result.get('error') or result.get('comment') or 'ارسال سفارش نیازمند بررسی است')
+
+    def demo_daily_stops_enabled(self):
+        f = self.feed_state
+        return not (self.daily_stops_override_identity and f.get('connected') and f.get('demo')
+                    and f.get('currency') == 'USD' and f.get('identity') == self.daily_stops_override_identity)
+
+    def demo_risk_config(self):
+        enabled = self.demo_daily_stops_enabled()
+        return dict(self.config, daily_loss_stop_enabled=enabled, loss_streak_stop_enabled=enabled)
 
     def risk_budget_enabled(self):
         f=self.feed_state
@@ -432,6 +445,20 @@ class Engine:
                 self.demo_identity = None
                 self.store.set('paused', True)
                 self.ea_control.request('PAUSE')
+            elif action == 'demo_daily_stops':
+                enabled = payload.get('enabled')
+                if not isinstance(enabled, bool):
+                    raise ValueError('وضعیت توقف روزانه باید روشن یا خاموش باشد')
+                f = self.feed_state
+                if not enabled:
+                    if (not f.get('connected') or not f.get('demo') or f.get('currency') != 'USD'
+                            or not f.get('identity') or not self.updated or not 0 <= now-self.updated <= 10
+                            or not self.clock.ready()):
+                        raise ValueError('لغو توقف روزانه فقط برای حساب دموی USD با ساعت و وضعیت تازه مجاز است')
+                self.daily_stops_override_identity = None if enabled else f['identity']
+                self.store.event(now, 'DEMO_DAILY_STOPS', dict(enabled=enabled,
+                    daily_loss_stop_enabled=enabled, loss_streak_stop_enabled=enabled,
+                    message='توقف زیان روزانه و زیان متوالی '+('روشن شد' if enabled else 'برای این نشست دمو خاموش شد')))
             elif action == 'risk_budget':
                 enabled=payload.get('enabled')
                 if not isinstance(enabled,bool): raise ValueError('وضعیت بودجهٔ ریسک باید روشن یا خاموش باشد')
@@ -538,6 +565,8 @@ class Engine:
                 ('drawdown_percent','max_drawdown_percent','سقف افت سرمایه فعال است'),
                 ('consecutive_losses','max_consecutive_losses','توقف حفاظتی پس از زیان‌های متوالی امروز'),
                 ('trades_today','max_trades_day','سقف تعداد ورود امروز پر شده است')):
+            if key in ('daily_drawdown_percent','consecutive_losses') and not self.demo_daily_stops_enabled():
+                continue
             if m[key] >= self.config[limit]:
                 reasons.append(reason)
         if m['open_count']:
@@ -585,7 +614,8 @@ class Engine:
                 events=self.store.events(), config={k: v for k, v in self.config.items() if k not in ('terminal_path','verified_utc_offset_seconds')},
                 error=self.last_error, pause_reason=self.pause_reason, flatten_pending=self.flatten, research=research, capital_binding=self.capital_binding,
                 clock=self.clock.snapshot(),
-                execution=dict(profile=self.config.get('execution_profile'), strategy=self.config.get('strategy', 'liquidity-trend-v1'),
+                execution=dict(daily_stops=dict(enabled=self.demo_daily_stops_enabled(), scope='current-demo-session', resets_on_restart=True,
+                    affects=['daily_loss','consecutive_losses']), profile=self.config.get('execution_profile'), strategy=self.config.get('strategy', 'liquidity-trend-v1'),
                     broker_armed=bool(self.demo_identity), last_order_attempt=self.last_order_attempt, tick_ages={s:now-m['tick']['time'] for s,m in self.markets.items() if m.get('tick')},
                     blockers=([f.get('error') or 'ارتباط متاتریدر قطع است'] if not f.get('connected') else [])
                         + (['ساعت شبکه هنوز تأیید نشده است'] if not self.clock.ready() else [])

@@ -1,7 +1,7 @@
 import math
 import uuid
 from datetime import datetime, timezone
-from .risk import size_for_risk
+from .risk import size_for_risk, effective_risk_percent
 
 
 class PaperBroker:
@@ -65,8 +65,7 @@ class PaperBroker:
         loss_per_lot = (distance + slip) * spec['factor']
         funds = equity if equity is not None else self.metrics(now)['equity']
         metrics = self.metrics(now) if metrics is None else metrics
-        remaining_daily = max(0, self.config['daily_loss_percent'] - metrics['daily_drawdown_percent'])
-        effective_risk = min(self.config['risk_percent'], remaining_daily)
+        effective_risk = effective_risk_percent(self.config, metrics)
         volume = size_for_risk(funds, effective_risk, loss_per_lot,
                               self.config['commission_per_lot_roundtrip_usd'],
                               spec['volume_min'], spec['volume_max'], spec['volume_step'])
