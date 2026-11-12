@@ -9,6 +9,7 @@ import secrets
 import signal
 import sys
 import time
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -18,9 +19,39 @@ from arian.market_tools import market_tools, WIDGET_ORIGIN
 ROOT = Path(__file__).resolve().parent
 
 
+class DashboardServer(ThreadingHTTPServer):
+    """Bound parallel handlers so slow clients cannot exhaust host memory."""
+    daemon_threads = True
+
+    def __init__(self, *args, **kwargs):
+        self.slots = threading.BoundedSemaphore(4)
+        super().__init__(*args, **kwargs)
+
+    def get_request(self):
+        sock, address = super().get_request()
+        sock.settimeout(5)
+        return sock, address
+
+    def process_request(self, request, client_address):
+        self.slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
+
+
 def make_handler(engine, token, port):
     hosts = {f'127.0.0.1:{port}', f'localhost:{port}'}
     origins = {'http://' + h for h in hosts}
+    state_cache = dict(at=0, body=None)
+    state_lock = threading.Lock()
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -56,9 +87,19 @@ def make_handler(engine, token, port):
             if path == '/api/session':
                 self.reply(200, dict(token=token))
             elif path == '/api/state':
-                self.reply(200, engine.snapshot())
+                try:
+                    with state_lock:
+                        if state_cache['body'] is None or time.monotonic()-state_cache['at'] >= 1:
+                            body = json.dumps(engine.snapshot(),ensure_ascii=False,allow_nan=False).encode('utf-8')
+                            state_cache.update(at=time.monotonic(),body=body)
+                        body = state_cache['body']
+                    self.reply(200, body)
+                except (MemoryError, ValueError):
+                    self.reply(503, dict(error='ساخت وضعیت موقتاً ناموفق است؛ چند لحظه دیگر دوباره بررسی کنید'))
             elif path == '/api/market-tools':
                 self.reply(200, market_tools())
+            elif path == '/api/calendar':
+                self.reply(200, engine.calendar_feed.snapshot())
             elif path == '/api/export':
                 columns = ['id', 'stream', 'symbol', 'direction', 'status', 'opened', 'closed', 'entry', 'sl', 'tp', 'exit', 'volume', 'risk_money', 'pnl', 'r', 'policy']
                 out = io.StringIO(newline='')
@@ -89,7 +130,10 @@ def make_handler(engine, token, port):
                 path = urlsplit(self.path).path
                 if path != '/api/control':
                     self.reply(404, dict(error='Not found')); return
-                self.reply(200, engine.action(payload['action'], payload))
+                result = engine.action(payload['action'], payload)
+                with state_lock:
+                    state_cache['body'] = None
+                self.reply(200, result)
             except (ValueError, TypeError, KeyError) as e:
                 self.reply(400, dict(error=str(e)))
 
@@ -110,7 +154,7 @@ def main():
     engine = Engine(config, args.db)
     # Bind before starting engine: a second launch cannot run another trade engine.
     try:
-        server = ThreadingHTTPServer(('127.0.0.1', port), make_handler(engine, secrets.token_urlsafe(32), port))
+        server = DashboardServer(('127.0.0.1', port), make_handler(engine, secrets.token_urlsafe(32), port))
     except OSError:
         raise SystemExit(f'Port {port} is in use. Open http://127.0.0.1:{port} or stop that instance.')
     engine.start()

@@ -70,7 +70,7 @@ def nds_reference(bars):
                 reward_risk=(.864 - .65) / (1.272 - .864))
 
 
-def analyze(symbol, m1, m5, config):
+def analyze_liquidity(symbol, m1, m5, config):
     result = dict(symbol=symbol, direction="WAIT", setup="liquidity-trend-v1",
                   reason="در انتظار ۱۲۰ کندل M1 و ۶۰ کندل M5 بسته‌شده", checks=[], candidate=None)
     if len(m1) < 120 or len(m5) < 60 or not valid_bars(m1) or not valid_bars(m5):
@@ -114,4 +114,46 @@ def analyze(symbol, m1, m5, config):
                                cycle_id=f"{symbol}:{int(sweep.time)}:{direction}",
                                atr=a, features={"symbol": symbol, "setup": "sweep",
                                                 "trend": "up" if up else "down"})
+    return result
+
+
+
+def analyze(symbol, m1, m5, config):
+    if config.get('strategy') != 'scalp-m1':
+        return analyze_liquidity(symbol, m1, m5, config)
+    result = dict(symbol=symbol, direction='WAIT', setup='scalp-m1-v1',
+                  reason='در انتظار ۱۲۰ کندل M1 و ۶۰ کندل M5 بسته‌شده', checks=[], candidate=None)
+    if len(m1) < 120 or len(m5) < 60 or not valid_bars(m1) or not valid_bars(m5):
+        return result
+    a = atr(m1)
+    if a <= 0:
+        return result
+    c5 = [b.close for b in m5]
+    fast, slow = ema(c5, 20), ema(c5, 50)
+    up = fast > slow and c5[-1] > slow and fast > ema(c5[:-3], 20)
+    down = fast < slow and c5[-1] < slow and fast < ema(c5[:-3], 20)
+    sign = 1 if up else -1 if down else 0
+    closes = [b.close for b in m1]
+    e9, e21 = ema(closes, 9), ema(closes, 21)
+    previous, confirm = m1[-2], m1[-1]
+    pullback = any(b.low <= e9 for b in m1[-4:-1]) if sign == 1 else any(b.high >= e9 for b in m1[-4:-1]) if sign == -1 else False
+    alignment = e9 > e21 if sign == 1 else e9 < e21 if sign == -1 else False
+    breakout = (confirm.close > previous.high and confirm.close > confirm.open) if sign == 1 else (confirm.close < previous.low and confirm.close < confirm.open) if sign == -1 else False
+    checks = [dict(id='trend', label='روند EMA20/50 در M5', ok=bool(sign)),
+              dict(id='alignment', label='هم‌جهتی EMA9/21 در M1', ok=alignment),
+              dict(id='pullback', label='اصلاح کوتاه تا EMA9 در سه کندل قبل', ok=pullback),
+              dict(id='structure', label='شکست کندل قبلی با کندل بسته‌شدهٔ M1', ok=breakout),
+              dict(id='body', label='بدنهٔ تأیید حداقل ۰٫۱۵ ATR', ok=abs(confirm.close-confirm.open) >= .15*a)]
+    result.update(atr=a, ema20=fast, ema50=slow, trend='صعودی' if up else 'نزولی' if down else 'خنثی',
+                  checks=checks, bars=[asdict(b) for b in m1[-80:]], bar_time=confirm.time)
+    fail = next((c for c in checks if not c['ok']), None)
+    if fail:
+        result['reason'] = fail['label'] + ' تأیید نشده'
+        return result
+    direction = 'BUY' if sign == 1 else 'SELL'
+    sl = min(b.low for b in m1[-3:])-.15*a if sign == 1 else max(b.high for b in m1[-3:])+.15*a
+    result.update(direction=direction, reason='اسکالپ M1 تأیید شد؛ بررسی ریسک و هزینه')
+    result['candidate'] = dict(symbol=symbol, direction=direction, sl=sl, atr=a,
+        signal_time=confirm.time+60, cycle_id=f'{symbol}:scalp:{int(confirm.time)}:{direction}',
+        features=dict(symbol=symbol, setup='scalp-m1-v1', trend='up' if up else 'down'))
     return result

@@ -33,5 +33,6 @@ def widget_url(kind):
 
 def market_tools():
     return dict(timezone='Asia/Tehran',provider='FinanceKit',news_review_required=True,
+                calendar=dict(provider='Forex Factory · Fair Economy',endpoint='/api/calendar',review_required=True),
                 widgets=[dict(key=kind,title=title,source_url=url,embed_url=widget_url(kind),height=height)
                          for kind,(title,url,height) in SOURCES.items()])

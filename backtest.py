@@ -15,6 +15,7 @@ from arian.storage import Store
 from arian.strategy import Bar, analyze, valid_bars
 from arian.paper import PaperBroker
 from arian.risk import entry_checks, session_key
+from arian.profiles import apply_profile
 
 ROOT = Path(__file__).resolve().parent
 
@@ -86,13 +87,13 @@ def research_news_ok(now, events, unfiltered):
     return not any(e['currency'] in ('USD','EUR') and abs(now-e['time']) <= 1200 for e in events)
 
 
-def run(manifest, output, unfiltered=False, calendar_path=None, start=None, end=None):
+def run(manifest, output, unfiltered=False, calendar_path=None, start=None, end=None, profile="conservative"):
     output = Path(output)
     output.mkdir(parents=True,exist_ok=True)
     db_path = output/'research.sqlite'
     if db_path.exists():
         raise ValueError('Output directory already has a research database; choose a new output directory')
-    config = json.loads((ROOT/'config.json').read_text(encoding='utf-8'))
+    config = apply_profile(json.loads((ROOT/'config.json').read_text(encoding='utf-8')), profile)
     events = []
     if not unfiltered:
         if not calendar_path:
@@ -163,7 +164,7 @@ def run(manifest, output, unfiltered=False, calendar_path=None, start=None, end=
     metrics=broker.metrics(times[-1]+59)
     trades=store.trades('historical-research')
     store.flush(db_path)
-    report=dict(source='MT5 bid M1 OHLC research replay', provenance=provenance,
+    report=dict(profile=profile,source='MT5 bid M1 OHLC research replay', provenance=provenance,
         data_start=times[0],data_end=times[-1]+60,evaluation_start=start,evaluation_end=end,
         bars=sum(len(v) for v in timeline.values()),signals=signal_count,metrics=metrics,
         max_drawdown_percent=max((s['drawdown_percent'] for s in samples),default=0),

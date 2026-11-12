@@ -1,7 +1,18 @@
 from datetime import datetime, timezone
 
 
-def news_status(store, now, buffer_minutes=20):
+def news_status(store, now, buffer_minutes=20, automatic=False):
+    if automatic:
+        cached = store.get('calendar_feed', {})
+        fresh = bool(cached.get('fetched_at') and 0 <= now-cached['fetched_at'] <= 6*3600
+                     and cached.get('week_start', 0) <= now < cached.get('week_end', 0))
+        if not fresh:
+            return dict(ok=False, reason='خوراک خودکار اخبار تازه یا مربوط به هفتهٔ جاری نیست', events=[], source='automatic')
+        events = [e for e in cached.get('events', []) if e['currency'] in ('USD', 'EUR') and e.get('impact') == 'High']
+        blocked = next((e for e in events if abs(e['time']-now) <= buffer_minutes*60), None)
+        return dict(ok=blocked is None, reason='محدودهٔ توقف خبر: '+blocked['title'] if blocked else 'خوراک خودکار معتبر؛ خارج از بازهٔ خبر مهم',
+                    events=events, source='automatic', valid_until=min(cached['week_end'],cached['fetched_at']+6*3600))
+
     calendar = store.get('news', {})
     checked = calendar.get('checked_at', 0)
     valid_until = calendar.get('valid_until', 0)

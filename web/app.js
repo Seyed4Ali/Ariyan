@@ -8,6 +8,7 @@ const date = ts => ts ? new Date(ts*1000).toLocaleString('fa-IR',{timeZone:'Asia
 const time = ts => ts ? new Date(ts*1000).toLocaleTimeString('en-GB',{timeZone:'Asia/Tehran',hour:'2-digit',minute:'2-digit',second:'2-digit'}) : '—';
 const titles = {overview:['دید کلی','هر معامله، با یک دلیل.','بازار را ببین. ریسک را محدود کن. از نتیجه یاد بگیر.'],agent:['ایجنت و یادگیری','از نتیجه یاد بگیر؛ با شواهد تغییر کن.','قانون تازه باید از آزمون داده‌های دیده‌نشده عبور کند.'],journal:['ژورنال معاملات','هیچ تصمیمی، بدون سابقه.','ورود، خروج، هزینه و دلیل هر تصمیم، در یک دفتر ماندگار.'],tools:['سشن و اخبار','زمان درست را هم ببین.','سشن‌های جهانی و تقویم اقتصادی، در کنار تصمیم‌های ربات.'],settings:['اتصال و تنظیمات','کنترل در دست توست.','اتصال محلی، اجرای دمو و محدودیت‌های روشن.']};
 let state, token, selectedSymbol='EURUSD', selectedTimeframe='M1', fetching=false, toastTimer;
+let metricsSource='broker-demo', calendarData;
 const priceDigits=()=>state?.markets[selectedSymbol]?.spec?.digits ?? (selectedSymbol==='EURUSD'?5:2);
 
 function setText(id,value){ $(id).textContent=value; }
@@ -24,6 +25,7 @@ async function loadMarketTools(force=false){
     if(!response.ok)throw new Error('ابزارهای بازار دریافت نشد؛ صفحه را تازه کن.');
     const config=await response.json();
     for(const widget of config.widgets){
+      if(widget.key==='economic-calendar')continue;
       const url=new URL(widget.embed_url);
       if(url.origin!=='https://widget.financekit.org'||!['/embed/forex-sessions','/embed/economic-calendar'].includes(url.pathname))throw new Error('آدرس ابزار معتبر نیست.');
       const target=widget.key==='forex-sessions'?$('sessions-widget'):$('calendar-widget');
@@ -35,6 +37,7 @@ async function loadMarketTools(force=false){
       target.replaceChildren(iframe);
     }
     toolsLoaded=true;
+    await loadCalendarFeed();
   }catch(error){notify(error.message,true);}
   finally{toolsLoading=false;}
 }
@@ -42,6 +45,38 @@ document.querySelectorAll('[data-view]').forEach(el=>el.addEventListener('click'
 document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>show(el.dataset.go)));
 document.querySelectorAll('[data-tool]').forEach(el=>el.addEventListener('click',()=>{show('tools');$('tool-'+el.dataset.tool).scrollIntoView({behavior:'smooth',block:'start'});}));
 $('reload-market-tools').addEventListener('click',()=>loadMarketTools(true));
+$('metrics-source').addEventListener('change',()=>{metricsSource=$('metrics-source').value;if(state)render();});
+
+async function loadCalendarFeed(){
+  try{
+    const response=await fetch('/api/calendar',{cache:'no-store'});
+    if(!response.ok)throw new Error('دریافت تقویم از سرور محلی ناموفق بود');
+    calendarData=await response.json();renderCalendarFeed();
+  }catch(error){setText('calendar-status',error.message);}
+}
+function renderCalendarFeed(){
+  const c=calendarData;if(!c)return;
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Tehran'});
+  const rows=(c.events||[]).filter(e=>($('calendar-range').value==='week'||new Date(e.time*1000).toLocaleDateString('en-CA',{timeZone:'Asia/Tehran'})===today)
+    &&($('calendar-currency').value==='all'||['EUR','USD'].includes(e.currency)));
+  setText('calendar-status',`${c.fresh?'دادهٔ معتبر هفتهٔ جاری':'دادهٔ معتبر در دسترس نیست'} · آخرین دریافت: ${date(c.fetched_at)}${c.error?' · خطای دریافت: '+c.error:''}`);
+  $('calendar-status').classList.toggle('negative',!c.fresh||!!c.error);
+  const impact={High:'زیاد',Medium:'متوسط',Low:'کم',Holiday:'تعطیلی'};
+  $('calendar-events').innerHTML=rows.length?`<table><thead><tr><th>زمان تهران</th><th>ارز</th><th>اهمیت</th><th>رویداد</th><th>پیش‌بینی</th><th>قبلی</th></tr></thead><tbody>${rows.map(e=>`<tr><td>${esc(date(e.time))}</td><td>${esc(e.currency)}</td><td>${esc(impact[e.impact]||e.impact)}</td><td>${esc(e.title)}</td><td>${esc(e.forecast)}</td><td>${esc(e.previous)}</td></tr>`).join('')}</tbody></table>`:'<p class="empty">رویدادی در فیلتر انتخاب‌شده موجود نیست.</p>';
+  $('calendar-import').disabled=!c.fresh||!!c.error;
+}
+$('calendar-range').addEventListener('change',renderCalendarFeed);
+$('calendar-currency').addEventListener('change',renderCalendarFeed);
+$('calendar-refresh').addEventListener('click',async()=>{await control('calendar_refresh');await loadCalendarFeed();});
+$('calendar-import').addEventListener('click',()=>{
+  if(!calendarData?.fresh||calendarData.error)return;
+  openCalendar();
+  const now=Date.now()/1000,until=Math.min(now+24*3600,calendarData.week_end);
+  $('news-until').value=new Date(until*1000).toISOString().slice(0,16);
+  $('news-events').value=(calendarData.events||[]).filter(e=>['USD','EUR'].includes(e.currency)&&e.impact==='High'&&e.time>=now-1200&&e.time<=until+1200)
+    .map(e=>`${new Date(e.time*1000).toISOString().slice(0,16)} | ${e.currency} | ${e.title}`).join('\n');
+});
+setInterval(()=>{if(!$('tools').hidden)loadCalendarFeed();},60000);
 document.querySelectorAll('[data-symbol]').forEach(el=>el.addEventListener('click',()=>{selectedSymbol=el.dataset.symbol;document.querySelectorAll('[data-symbol]').forEach(x=>x.classList.toggle('selected',x===el));if(state) renderMarket();}));
 $('chart-timeframe').addEventListener('change',()=>{selectedTimeframe=$('chart-timeframe').value;if(state)renderMarket();});
 $('timeframe-summary').addEventListener('click',event=>{const button=event.target.closest('[data-timeframe]');if(!button)return;selectedTimeframe=button.dataset.timeframe;$('chart-timeframe').value=selectedTimeframe;if(state)renderMarket();});
@@ -56,10 +91,15 @@ async function control(action,extra={}){
     await refresh();return true;
   } catch(error){notify(error.message,true);return false;}
 }
-$('pause-button').addEventListener('click',()=>control(state?.paused?'resume':'pause'));
+$('pause-button').addEventListener('click',()=>control(state?.monitoring===false?'monitor_resume':state?.paused?'resume':'pause'));
 $('flatten-button').addEventListener('click',()=>control('flatten'));
+$('demo-daily-stops-toggle').addEventListener('click',()=>control('demo_daily_stops',{enabled:state?.execution?.daily_stops?.enabled===false}));
+$('fast-profile').addEventListener('click',()=>control('set_profile',{profile:'fast-demo'}));
+$('ea-start').addEventListener('click',()=>control('ea_resume'));
+$('risk-budget-toggle').addEventListener('click',()=>control('risk_budget',{enabled:state?.ea_control?.risk_budget_enabled===false}));
 $('rollback-button').addEventListener('click',()=>control('rollback'));
 $('demo-arm').addEventListener('click',async()=>{if(await control('demo_arm',{confirmation:$('demo-confirm').value.trim()})) $('demo-confirm').value='';});
+$('new-demo-session').addEventListener('click',()=>control('demo_new_session',{confirmation:$('new-demo-confirm').value.trim()}));
 $('demo-disarm').addEventListener('click',()=>control('demo_disarm'));
 function openCalendar(){
   const until=state?.news.valid_until || (Date.now()/1000+8*3600);
@@ -104,7 +144,8 @@ function renderMarket(){
   setText('chart-symbol',`${selectedSymbol} · ${market?.spec?.symbol||''} · ${selectedTimeframe}`);setText('chart-trend','روند: '+(frame?.trend||'—'));
   setText('bid',tick?num(tick.bid,digits):'—');setText('ask',tick?num(tick.ask,digits):'—');
   setText('spread',tick?num(tick.ask-tick.bid,digits):'—');
-  setText('tick-age',tick?`${fa(Math.max(0,Math.round(state.now-tick.time)))} ثانیه قبل`:'—');
+  const age=tick?Math.round(state.now-tick.time):null;
+  setText('tick-age',age===null?'—':age<0?`${fa(-age)} ثانیه جلوتر از ساعت سیستم`:`${fa(age)} ثانیه قبل`);
   let bars=[...(frame?.bars|| (selectedTimeframe==='M1'?market?.bars||[]:[]))];
   if(frame?.current){bars=bars.filter(b=>b.time<frame.current.time);bars.push(frame.current);}
   setText('chart-bar-label',frame?.current?'آخرین کندل در حال تشکیل است':'کندل‌های بسته‌شده');
@@ -119,53 +160,98 @@ function renderMarket(){
   setText('check-count',`${fa(checks.filter(c=>c.ok).length)} / ${fa(checks.length)}`);
   setText('decision',state.paused?'PAUSED':!state.connection.connected?'BLOCK':market?.decision||'WAIT');
   setText('decision-reason',!state.connection.connected?'اتصال به متاتریدر برقرار نیست؛ ورود مسدود است.':market?.reason||'در انتظار دریافت کندل‌های بروکر');
+  if(state.monitoring===false)setText('decision-reason','پایش به درخواست شما متوقف شده؛ ادامهٔ پایش فقط خواندن داده را فعال می‌کند.');
   setText('news-note',state.news.reason);
 }
 
 function tradeTable(trades,compact=false){
-  if(!trades.length)return '<div class="empty"><span>▱</span>هنوز معامله‌ای ثبت نشده.<br>ورود فقط بعد از عبور از چک‌لیست انجام می‌شود.</div>';
+  if(!trades.length)return `<div class="empty"><span>▱</span>${compact?'پوزیشن بازی برای نمایش وجود ندارد.':'هنوز معامله‌ای در ژورنال ثبت نشده است.'}</div>`;
   const statuses={OPEN:'باز',STOP:'حد ضرر',TARGET:'حد سود',TIME:'خروج زمانی',FLATTEN:'خروج دستی',BROKER_CLOSED:'خروج بروکر',REJECTED:'رد بروکر',SUBMITTING:'در حال ارسال',UNCERTAIN:'نیازمند بررسی'};
-  return `<table><thead><tr><th>نماد / جهت</th><th>محیط</th><th>ورود</th><th>حد ضرر / هدف</th><th>حجم</th><th>${compact?'سود شناور':'نتیجه'}</th><th>وضعیت</th><th>زمان تهران</th></tr></thead><tbody>${[...trades].reverse().map(t=>`<tr><td><b>${esc(t.symbol)}</b> <span class="badge ${t.direction==='SELL'?'sell':''}">${esc(t.direction)}</span></td><td>${t.stream.startsWith('mt5-demo-')?'دموی بروکر':'شبیه‌سازی'}</td><td class="numeric">${num(t.entry,t.symbol==='EURUSD'?5:2)}</td><td class="numeric">${num(t.sl,t.symbol==='EURUSD'?5:2)} / ${num(t.tp,t.symbol==='EURUSD'?5:2)}</td><td class="numeric">${num(t.volume)}</td><td class="numeric ${(compact?t.floating:t.pnl)>0?'positive':(compact?t.floating:t.pnl)<0?'negative':''}">${money(compact?t.floating:t.pnl)}${!compact&&t.status!=='OPEN'?` · ${num(t.r)}R`:''}</td><td>${esc(statuses[t.status]||t.status)}</td><td>${esc(date(t.opened))}</td></tr>`).join('')}</tbody></table>`;
+  return `<table><thead><tr><th>نماد / جهت</th><th>محیط</th><th>ورود</th><th>حد ضرر / هدف</th><th>حجم</th><th>${compact?'سود شناور':'نتیجه'}</th><th>وضعیت</th><th>زمان تهران</th></tr></thead><tbody>${[...trades].reverse().map(t=>`<tr><td><b>${esc(t.symbol)}</b> <span class="badge ${t.direction==='SELL'?'sell':''}">${esc(t.direction)}</span></td><td>${t.stream.startsWith('mt5-ea-')?'اکسپرت آریان':t.stream.startsWith('mt5-demo-')?'دموی پایتون':'شبیه‌سازی'}</td><td class="numeric">${num(t.entry,t.symbol==='EURUSD'?5:2)}</td><td class="numeric">${num(t.sl,t.symbol==='EURUSD'?5:2)} / ${num(t.tp,t.symbol==='EURUSD'?5:2)}</td><td class="numeric">${num(t.volume)}</td><td class="numeric ${(compact?t.floating:t.pnl)>0?'positive':(compact?t.floating:t.pnl)<0?'negative':''}">${money(compact?(t.floating+(t.stream.startsWith('mt5-ea-')?t.pnl:0)):t.pnl)}${!compact&&t.status!=='OPEN'&&t.r!=null?` · ${num(t.r)}R`:''}</td><td>${esc(statuses[t.status]||t.status)}${t.execution_audit?.status==='quote_mismatch'?'<small class="negative"> · مغایرت اجرا</small>':''}</td><td>${esc(date(t.opened))}</td></tr>`).join('')}</tbody></table>`;
 }
 
 function render(){
-  const a=state.account,l=state.learner,c=state.connection;
+  const observed=metricsSource==='external-ea',demo=metricsSource==='broker-demo',tracking=state.tracking;
+  setText('execution-health',`${state.execution?.profile||'conservative'} · ${state.mode} · ${(state.execution?.blockers||[]).join(' · ')||'موتور فعال؛ در انتظار ستاپ معتبر'}`);
+  const a=observed?(tracking?.metrics||{daily_pnl:null,drawdown_percent:null,closed_count:0,win_rate:null,daily_drawdown_percent:0,trades_today:0,consecutive_losses:0}):demo?(state.demo_account||state.account):state.account;
+  const dailyStopsEnabled=state.execution?.daily_stops?.enabled!==false;
+  const l=observed?(tracking?.learner||{phase:'collecting',version:0,message:'در انتظار دریافت معاملات اکسپرت آریان'}):state.learner,c=state.connection;
   setText('broker-account-name',c.connected?`${c.server} · ${c.account_login||'—'}`:'حساب متاتریدر متصل نیست');
   setText('broker-account-status',c.connected?`${c.demo?'حساب دمو':'حساب واقعی · فقط خواندن'} · ${c.currency} · ${c.trade_allowed?'Algo Trading روشن':'Algo Trading خاموش'}`:'برای خواندن موجودی و قیمت، متاتریدر را متصل نگه دار');
+  if(state.monitoring===false){setText('broker-account-name','پایش حساب متوقف است');setText('broker-account-status','سوابق محلی حفظ شده‌اند؛ ترمینال خودکار باز نمی‌شود.');}
   setText('broker-balance',c.connected?money(c.balance):'—');setText('broker-equity',c.connected?money(c.equity):'—');setText('broker-free-margin',c.connected?money(c.margin_free):'—');
-  setText('mode',state.mode==='DEMO'?'BROKER DEMO':'SHADOW MODE');
-  setText('pause-button',state.paused?'ادامهٔ ورود':'توقف ورود');
+  setText('mode',observed?'MT5 EA MONITOR':state.mode==='DEMO'?'BROKER DEMO':'SHADOW MODE');
+  setText('pause-button',state.monitoring===false?'ادامهٔ پایش (بدون ورود)':state.paused?'ادامهٔ ورود پایتون':'توقف ورود');
   setText('equity',state.capital_binding?money(a.equity):'—');setText('balance-detail',state.capital_binding?`مبنای دمو: ${money(state.capital_binding.initial)} · بالانس شبیه‌سازی: ${money(a.balance)}`:'در انتظار هم‌اندازه‌سازی با موجودی حساب دمو');
+  setText('equity-label',observed?'سرمایهٔ منتسب به اکسپرت':demo?'اکوئیتی حساب دمو':'سرمایهٔ شبیه‌سازی');
+  if(demo)setText('balance-detail',`دفتر ریسک ${state.risk_session?'آزمون تازه':'حساب'} · مبنا: ${money(a.initial)} · بالانس بروکر: ${money(a.balance)}`);
+  if(observed)setText('balance-detail',`مبنای رصد + نتیجهٔ اکسپرت · بالانس دفتر: ${money(a.balance)}`);
+  $('demo-daily-stops-toggle').disabled=!(c.connected&&c.demo&&c.currency==='USD'&&state.clock?.ready);
+  $('demo-daily-stops-toggle').setAttribute('aria-checked',String(dailyStopsEnabled));
+  setText('demo-daily-stops-toggle',dailyStopsEnabled?'لغو توقف روزانه و زیان متوالی':'فعال‌کردن دوبارهٔ توقف روزانه و زیان متوالی');
+  setText('demo-daily-stops-note',(dailyStopsEnabled?'توقف زیان روزانه و زیان متوالی روشن است.':'هر دو توقف برای این نشست حساب دمو خاموش‌اند؛ زیان روزانه و تعداد زیان‌ها همچنان ثبت می‌شوند.')+' حد ضرر هر معامله، سقف افت کل، سقف تعداد ورود و فاصلهٔ بین معاملات برقرارند. پس از قطع اتصال، تغییر حساب یا راه‌اندازی مجدد، توقف‌ها روشن می‌شوند. این دکمه به‌تنهایی مجوز معامله را فعال نمی‌کند.');
+  const bridge=state.ea_control;
+  const budgetEnabled=bridge?.risk_budget_enabled!==false;
+  $('risk-budget-toggle').hidden=!observed;
+  $('risk-budget-toggle').setAttribute('aria-checked',String(budgetEnabled));
+  setText('risk-budget-toggle',budgetEnabled?'سقف زیان و افت: روشن — خاموش کن':'سقف زیان و افت: خاموش — روشن کن');
+  setText('risk-budget-note',observed?(budgetEnabled?'سقف زیان روزانه و افت سرمایه فعال است.':'سقف زیان روزانه و افت سرمایه برای این نشست دمو خاموش است؛ زیان بیشتر مانع ورود نمی‌شود.')+' تغییر کلید ورود را متوقف می‌کند؛ برای ادامه «شروع کنترل‌شده» را بزن. با راه‌اندازی مجدد، سقف‌ها روشن می‌شوند.':'این کلید فقط روی اکسپرت دمو اثر دارد؛ محدودیت‌های موتور پایتون مستقل‌اند.');
+  const ready=bridge?.readiness;
+  setText('ea-readiness',ready?.allowed?'محدودیت عمومی ریسک باز است؛ ورود به تأیید چارت، قیمت تازه و ستاپ معتبر نیاز دارد.':(ready?.reasons||['وضعیت آماده نیست']).join(' · '));
+  $('ea-start').disabled=!!bridge?.running_requested;
+  setText('ea-start',bridge?.running_requested?'درخواست شروع فعال است':'شروع کنترل‌شدهٔ اکسپرت دمو');
+  const chartStates={READY:'آمادهٔ جست‌وجوی ستاپ',RISK_BLOCK:'مسدود با محدودیت ریسک',PAUSE:'متوقف',FLATTEN:'توقف و خروج',NO_COMMAND:'بدون فرمان معتبر',LEASE_EXPIRED:'اجازه منقضی شده',INPUT_DISABLED:'EnableEntries خاموش',EXECUTION_LATCH:'قفل مغایرت اجرا',ALGO_DISABLED:'Algo Trading خاموش'};
+  const entryReasons={WAIT_SETUP:'منتظر ستاپ معتبر',ACCOUNT_BUSY:'حساب سفارش یا پوزیشن دیگری دارد',INVALID_QUOTE:'قیمت نامعتبر',STALE_QUOTE:'تیک قدیمی',INVALID_TICK_SIZE:'گام قیمت نامعتبر',SPREAD_LIMIT:'اسپرد بالاتر از حد تنظیم‌شده',BUY_LIMIT_LEVELS:'سطوح خرید معلق هنوز معتبر نیستند',SELL_LIMIT_LEVELS:'سطوح فروش معلق هنوز معتبر نیستند',VOLUME_BELOW_MIN_OR_RISK:'حجم مجاز ریسک کمتر از حداقل لات بروکر است یا محاسبهٔ حجم نامعتبر است',PENDING_ACCEPTED:'سفارش معلق پذیرفته شد',PENDING_ACTIVE:'سفارش معلق فعال است',CYCLE_ALREADY_USED:'این سایکل قبلاً مصرف شده است',ENTRY_LOCK_BUSY:'نوبت ارسال در اختیار چارت دیگری است'};
+  $('ea-charts').replaceChildren();
+  for(const symbol of ['EURUSD','GOLD','BITCOIN']){
+    const charts=(bridge?.charts||[]).filter(c=>c.symbol===symbol);
+    const row=document.createElement('p');row.textContent=`${symbol}: `+(charts.length?charts.map(c=>`نسخه ${c.version} · ${(c.timeframe||'').replace('PERIOD_','')} · ${chartStates[c.state]||c.state}${c.entry_reason&&c.state==='READY'?' · '+(entryReasons[c.entry_reason]||(c.entry_reason.startsWith('BROKER_REJECT_')?'بروکر سفارش را رد کرد؛ کد '+c.entry_reason.slice(14):c.entry_reason)):''}`).join(' / '):'تأیید زنده از اکسپرت دریافت نشده است');$('ea-charts').append(row);
+  }
+  setText('metrics-note',observed?`منبع: اکسپرت آریان · magic ${(tracking?.magic_numbers||[]).join('، ')} · فرمان: ${bridge?.requested||'—'} · ${bridge?.acknowledged?'دریافت تأیید شده':'در انتظار تأیید'}${bridge?.error?' · خطای پل: '+bridge.error:''}`:demo?'منبع: حساب دموی بروکر و دفتر ریسک حساب':'منبع: معاملات شبیه‌سازی پایتون؛ مستقل از معاملات اکسپرت متاتریدر');
+  setText('execution-warning',observed&&a.review_count?`${fa(a.review_count)} معامله با مغایرت قیمت اجرا و تیک هم‌زمان نیازمند بررسی است. سود زیر، ثبت حساب دمو است؛ این معاملات وارد آموزش ایجنت نمی‌شوند.`:observed&&a.pending_audit_count?`${fa(a.pending_audit_count)} معامله در انتظار تطبیق قیمت اجراست؛ تا تکمیل بررسی وارد آموزش نمی‌شود.`:'');
+  $('execution-warning').hidden=!(observed&&(a.review_count||a.pending_audit_count));
   signed('daily-pnl',a.daily_pnl);setText('drawdown',`${num(a.drawdown_percent)}%`);setText('trade-count',fa(a.closed_count));
   setText('win-rate',a.win_rate===null?'نرخ برد پس از اولین خروج':`نرخ برد ${num(a.win_rate,1)}٪ · ${num(a.expectancy_r)}R میانگین`);
+  if(observed&&(a.review_count||a.pending_audit_count))setText('win-rate',`نرخ برد ثبت‌شدهٔ دمو: ${num(a.win_rate,1)}٪ · کیفیت اجرا تأیید نشده`);
   $('feed-dot').classList.toggle('connected',!!c.connected);
   setText('feed-label',c.connected?'متاتریدر متصل است':c.error||'متاتریدر متصل نیست');
   setText('feed-detail',c.connected?`${c.server} · ${c.demo?'DEMO':'READ-ONLY LIVE'} · ${c.currency}`:'باز کردن متاتریدر و ورود به حساب');
   setText('execution-label',state.flatten_pending?'خروج در انتظار قیمت تازه':state.mode==='DEMO'?'ورود خودکار فقط روی دمو فعال است':'اجرای واقعی خاموش');
-  const stale=state.updated&&Date.now()/1000-state.updated>35;
+  const stale=state.monitoring!==false&&state.updated&&state.now-state.updated>35;
   $('api-error').hidden=!(state.error||stale);setText('api-error',state.error||'موتور بیش از ۳۵ ثانیه به‌روزرسانی نشده است؛ وضعیت اتصال را بررسی کن.');
   for(const symbol of ['EURUSD','XAUUSD','BTCUSD']){const tick=state.markets[symbol]?.tick;setText('quote-'+symbol,tick?num(tick.bid,state.markets[symbol]?.spec?.digits??2):'—');}
-  setText('risk-used',`${num(a.daily_drawdown_percent)}%`);$('risk-progress').value=Math.min(1,a.daily_drawdown_percent);
-  setText('day-trades',`${fa(a.trades_today)} / ۶`);setText('loss-streak',`${fa(a.consecutive_losses)} / ۳`);
+  setText('risk-used',`${num(a.daily_drawdown_percent)}%`);$('risk-progress').value=Math.min(1,a.daily_drawdown_percent||0);
+  setText('open-risk',observed?`ریسک اولیهٔ باز: ${money(a.open_risk_money)} · آخرین ورود: ${money(a.last_risk_money)} (${num(a.last_risk_percent)}٪ از موجودی دفتر پیش از ورود)`:'ریسک هر ورود شبیه‌سازی حداکثر ۰٫۲۵٪');
+  setText('drawdown-note',observed?(budgetEnabled?'افت دفتر اکسپرت از اوج رصدشده؛ سقف ورود: ۵٪':'افت دفتر اکسپرت؛ سقف افت خاموش است'):'سقف توقف کل: ۵٪');
+  setText('day-trades',observed?fa(a.trades_today):`${fa(a.trades_today)} / ${fa(state.config.max_trades_day)}`);setText('loss-streak',observed?fa(a.consecutive_losses):`${fa(a.consecutive_losses)} / ${demo&&!dailyStopsEnabled?'توقف خاموش':fa(state.config.max_consecutive_losses)}`);
+  setText('risk-per-trade',observed?`${num(a.open_risk_percent)}٪`:fa(state.config.risk_percent)+'٪');
+  setText('risk-per-trade-label',observed?'ریسک اولیهٔ باز':'هر معامله');
+  setText('risk-cap-note',observed?(budgetEnabled?'زیان خالص امروز؛ سقف ورود: ۱٪':'زیان خالص امروز؛ سقف زیان خاموش است'):demo&&!dailyStopsEnabled?'توقف زیان روزانه خاموش است':'از سقف زیان روزانهٔ ۱٪');
+  setText('execution-label',state.monitoring===false?'پایش متوقف است؛ ترمینال خودکار باز نمی‌شود':state.flatten_pending?'خروج در انتظار تأیید اکسپرت یا بسته‌شدن پوزیشن‌ها':observed?(bridge?.running_requested?(ready?.allowed?'شروع درخواست شده؛ وضعیت هر چارت را بررسی کن':'شروع درخواست شده؛ ورود با محدودیت ریسک مسدود است'):bridge?.acknowledged?'توقف اکسپرت تأیید شده':'منتظر تأیید اکسپرت'):state.mode==='DEMO'?'ورود خودکار فقط روی دمو فعال است':'اجرای واقعی پایتون خاموش');
   setText('agent-summary',l.message);setText('policy-version',`CHECKLIST v${l.version}`);setText('agent-version',`v${l.version}`);
   const progress=l.phase==='forward'?l.forward_count||0:l.collection_count||0,goal=l.phase==='forward'?50:100;
   setText('learning-count',`${fa(progress)} از ${fa(goal)} معامله${l.phase==='forward'?'ٔ آینده':''}`);$('learning-progress').max=goal;$('learning-progress').value=progress;
+  setText('learning-source',observed?`اکسپرت: ${fa(l.observed_closed||0)} خروج · ${fa(l.eligible_count||0)} نمونهٔ قابل آموزش · ${fa(l.excluded_count||0)} کنارگذاشته‌شده به‌دلیل کمبود داده یا مغایرت اجرا؛ یادگیری فقط پژوهشی است`:`مبنای شبیه‌سازی: ${fa(l.total_trades||0)} خروج؛ فقط معاملات بسته‌شده وارد آموزش می‌شوند`);
+  if(observed)setText('agent-summary',`${l.message} · این ایجنت پارامترهای اکسپرت MT5 را تغییر نمی‌دهد.`);
   setText('agent-phase',l.phase==='forward'?'آزمون آینده':'جمع‌آوری داده');setText('agent-message',l.message);
   const policy=l.active||l.candidate;
   setText('learned-rule',policy?`${l.active?'فیلتر فعال در شبیه‌سازی':'فرضیه در حال آزمایش'}: ورود در ${policy.rule.feature} = ${policy.rule.value} حذف شود. شناسه: ${policy.id}`:'هنوز قانون تازه‌ای تأیید نشده است. قواعد پایه فعال‌اند.');
-  const rows=[['سرمایه',money(state.baseline.equity),money(a.equity)],['معاملات بسته',fa(state.baseline.closed_count),fa(a.closed_count)],['میانگین نتیجه',num(state.baseline.expectancy_r)+'R',num(a.expectancy_r)+'R'],['افت سرمایه',num(state.baseline.drawdown_percent)+'%',num(a.drawdown_percent)+'%']];
+  const paper=state.account;
+  const rows=[['سرمایه',money(state.baseline.equity),money(paper.equity)],['معاملات بسته',fa(state.baseline.closed_count),fa(paper.closed_count)],['میانگین نتیجه',num(state.baseline.expectancy_r)+'R',num(paper.expectancy_r)+'R'],['افت سرمایه',num(state.baseline.drawdown_percent)+'%',num(paper.drawdown_percent)+'%']];
   $('comparison').innerHTML=rows.map(r=>`<tr><td>${esc(r[0])}</td><td class="numeric">${esc(r[1])}</td><td class="numeric">${esc(r[2])}</td></tr>`).join('');
-  const all=[...state.trades,...state.demo_trades].sort((x,y)=>x.opened-y.opened);
+  const all=[...state.trades,...state.demo_trades,...(state.tracking?.trades||[])].sort((x,y)=>x.opened-y.opened);
   $('positions').innerHTML=`<div class="table-wrap">${tradeTable(all.filter(t=>['OPEN','SUBMITTING','UNCERTAIN'].includes(t.status)),true)}</div>`;
   $('trade-history').innerHTML=tradeTable(all);
   const eventNames={START:'شروع موتور',CAPITAL_SYNC:'هماهنگ‌سازی سرمایهٔ دمو',CONTROL:'کنترل',DECISION:'تصمیم',PAPER_OPEN:'ورود شبیه‌سازی',PAPER_CLOSE:'خروج شبیه‌سازی',DEMO_SUBMIT:'ارسال دمو',DEMO_CLOSE:'خروج دمو',DEMO_EXIT_REQUEST:'درخواست خروج دمو',NEWS_MANUAL_REVIEW:'بررسی اخبار',ENGINE_ERROR:'خطای موتور',POLICY_APPLIED_PAPER_ONLY:'چک‌لیست تازه',POLICY_ROLLBACK:'بازگشت چک‌لیست'};
   $('events').innerHTML=state.events.map(e=>`<div class="event"><time>${time(e.ts)}</time><div><b>${esc(eventNames[e.kind]||e.kind)}</b><p>${esc([e.payload.symbol,e.payload.decision,e.payload.reason,e.payload.message,e.payload.action,e.payload.status,e.payload.pnl!==undefined?money(e.payload.pnl):''].filter(Boolean).join(' · '))}</p></div></div>`).join('');
   const details=[['وضعیت',c.connected?'متصل':'قطع'],['سرور',c.server||'—'],['شماره حساب',c.account_login||'—'],['نوع حساب',c.connected?(c.demo?'Demo':'Real · فقط خواندن'):'—'],['ارز',c.currency||'—'],['بالانس بروکر',money(c.balance)],['اکوئیتی بروکر',money(c.equity)],['سرمایهٔ اولیهٔ هم‌اندازه',money(state.capital_binding?.initial)],['Algo Trading',c.trade_allowed?'روشن':'خاموش'],['مجوز ورود بروکر',state.mode==='DEMO'?'فعال · فقط دمو':'خاموش']];
   $('connection-details').innerHTML=details.map(([key,value])=>`<div><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');
-  const cfg=state.config,configs=[['ریسک هر معامله',cfg.risk_percent+'٪'],['توقف روزانه',cfg.daily_loss_percent+'٪'],['افت مجاز',cfg.max_drawdown_percent+'٪'],['حداکثر نگهداری',cfg.max_hold_seconds/60+' دقیقه'],['نسبت هدف به ریسک',cfg.reward_risk+'R'],['هزینهٔ فرضی رفت‌وبرگشت',cfg.commission_per_lot_roundtrip_usd+' USD / lot'],['لغزش هر سمت',cfg.slippage_points+' point'],['نماد یورو',cfg.symbols.EURUSD],['نماد طلا',cfg.symbols.XAUUSD],['نماد بیت‌کوین',cfg.symbols.BTCUSD],['بازهٔ ورود FX و طلا','07:00–17:00 UTC'],['بازهٔ بررسی بیت‌کوین','تمام روزها · تابع خوراک بروکر'],['فاصله از خبر','±20 دقیقه'],['سقف ورود روزانه',cfg.max_trades_day]];
+  const cfg=state.config,configs=[['ریسک هر معامله',cfg.risk_percent+'٪'],['توقف روزانه',dailyStopsEnabled?cfg.daily_loss_percent+'٪':'خاموش برای نشست دمو'],['توقف زیان متوالی',dailyStopsEnabled?cfg.max_consecutive_losses:'خاموش برای نشست دمو'],['افت مجاز',cfg.max_drawdown_percent+'٪'],['حداکثر نگهداری',cfg.max_hold_seconds/60+' دقیقه'],['نسبت هدف به ریسک',cfg.reward_risk+'R'],['هزینهٔ فرضی رفت‌وبرگشت',cfg.commission_per_lot_roundtrip_usd+' USD / lot'],['لغزش هر سمت',cfg.slippage_points+' point'],['نماد یورو',cfg.symbols.EURUSD],['نماد طلا',cfg.symbols.XAUUSD],['نماد بیت‌کوین',cfg.symbols.BTCUSD],['بازهٔ ورود FX و طلا',`${cfg.session_start_utc}:00–${cfg.session_end_utc}:00 UTC`],['بازهٔ بررسی بیت‌کوین','تمام روزها · تابع خوراک بروکر'],['فاصله از خبر','±20 دقیقه'],['سقف ورود روزانه',cfg.max_trades_day],['فاصلهٔ بعد از خروج',cfg.cooldown_seconds+' ثانیه'],['پروفایل',cfg.execution_profile]];
   $('config-details').innerHTML=configs.map(([key,value])=>`<div class="config-item"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');
   if(state.research){const r=state.research;const values=[['تعداد کندل',fa(r.bars)],['معاملات بسته',fa(r.metrics.closed_count)],['سود و زیان خالص',money(r.metrics.pnl)],['بیشترین افت',num(r.max_drawdown_percent)+'%'],['نرخ برد',num(r.metrics.win_rate,1)+'%'],['میانگین نتیجه',num(r.metrics.expectancy_r)+'R'],['شروع داده',date(r.data_start)],['پایان داده',date(r.data_end)]];$('research-results').innerHTML=values.map(([key,value])=>`<div class="config-item"><span>${esc(key)}</span><strong>${esc(value)}</strong></div>`).join('');}
+  setText('hold-label','خروج زمانی پایتون: '+fa(state.config.max_hold_seconds/60)+' دقیقه؛ اکسپرت مستقل است');
   setText('last-update',state.updated?'آخرین بررسی '+time(state.updated):'در انتظار موتور');renderMarket();
+  if(state.monitoring===false)setText('last-update','پایش متوقف است · سوابق محلی حفظ شده‌اند');
 }
 
 async function refresh(){

@@ -1,7 +1,7 @@
 import math
 import uuid
 from datetime import datetime, timezone
-from .risk import size_for_risk
+from .risk import size_for_risk, effective_risk_percent
 
 
 class PaperBroker:
@@ -41,7 +41,7 @@ class PaperBroker:
                     expectancy_r=sum(t['r'] for t in closed) / len(closed) if closed else None,
                     profit_factor=sum(t['pnl'] for t in closed if t['pnl'] > 0) / loss_sum if loss_sum else None)
 
-    def open(self, candidate, tick, spec, now, policy='baseline', equity=None, persist=True):
+    def open(self, candidate, tick, spec, now, policy='baseline', equity=None, persist=True, metrics=None):
         if self.store.seen(self.stream, candidate['cycle_id']):
             return None
         if any(t['status'] == 'OPEN' for t in self.store.trades(self.stream)):
@@ -64,9 +64,8 @@ class PaperBroker:
         # Reserve commission and adverse exit slippage in risk budget.
         loss_per_lot = (distance + slip) * spec['factor']
         funds = equity if equity is not None else self.metrics(now)['equity']
-        metrics = self.metrics(now)
-        remaining_daily = max(0, self.config['daily_loss_percent'] - metrics['daily_drawdown_percent'])
-        effective_risk = min(self.config['risk_percent'], remaining_daily)
+        metrics = self.metrics(now) if metrics is None else metrics
+        effective_risk = effective_risk_percent(self.config, metrics)
         volume = size_for_risk(funds, effective_risk, loss_per_lot,
                               self.config['commission_per_lot_roundtrip_usd'],
                               spec['volume_min'], spec['volume_max'], spec['volume_step'])

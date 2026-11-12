@@ -12,8 +12,10 @@ from server import make_handler
 
 
 class FakeEngine:
-    def snapshot(self):return {'ok':True}
-    def action(self,action,payload):return {'ok':True,'action':action}
+    def snapshot(self):return {'ok':True,'action':getattr(self,'last_action',None)}
+    def action(self,action,payload):
+        self.last_action=action
+        return {'ok':True,'action':action}
 
 
 class APITests(unittest.TestCase):
@@ -40,6 +42,12 @@ class APITests(unittest.TestCase):
         self.assertEqual(err.exception.code,403)
         with self.request({'Origin':self.url,'X-Arian-Token':'test-token'}) as response:
             self.assertTrue(json.load(response)['ok'])
+
+    def test_control_invalidates_state_cache_immediately(self):
+        with urllib.request.urlopen(self.url+'/api/state',timeout=3) as response:json.load(response)
+        with self.request({'Origin':self.url,'X-Arian-Token':'test-token'}):pass
+        with urllib.request.urlopen(self.url+'/api/state',timeout=3) as response:
+            self.assertEqual(json.load(response)['action'],'pause')
 
     def test_host_rebinding_blocked(self):
         req=urllib.request.Request(self.url+'/api/session',headers={'Host':'evil.example'})
